@@ -1,0 +1,5 @@
+{
+  "name": "Character Builder",
+  "description": "A robust, react-based character configurator allowing users to layer assets and admins to manage them.",
+  "requestFramePermissions": []
+}
