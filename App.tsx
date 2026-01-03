@@ -25,22 +25,75 @@ const App: React.FC = () => {
 
   // Load data on mount and when user changes
   useEffect(() => {
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+
     const loadData = async () => {
+      // 设置超时，防止无限加载
+      timeoutId = setTimeout(async () => {
+        if (mounted && loading) {
+          console.warn('数据加载超时，使用默认数据');
+          try {
+            const { getStoredDataSync } = await import('./services/storage');
+            if (mounted) {
+              setData(getStoredDataSync());
+              setLoading(false);
+            }
+          } catch (error) {
+            console.error('超时后加载默认数据失败:', error);
+            if (mounted) {
+              setData({ categories: [], assets: [] });
+              setLoading(false);
+            }
+          }
+        }
+      }, 8000); // 8秒超时
+
       try {
         const stored = await getStoredData();
-        setData(stored);
+        if (mounted) {
+          setData(stored);
+          setLoading(false);
+          clearTimeout(timeoutId);
+        }
       } catch (error) {
         console.error('加载数据失败:', error);
         // 使用同步版本作为后备
-        const { getStoredDataSync } = await import('./services/storage');
-        setData(getStoredDataSync());
-      } finally {
-        setLoading(false);
+        try {
+          const { getStoredDataSync } = await import('./services/storage');
+          if (mounted) {
+            setData(getStoredDataSync());
+            setLoading(false);
+            clearTimeout(timeoutId);
+          }
+        } catch (fallbackError) {
+          console.error('后备加载也失败:', fallbackError);
+          if (mounted) {
+            // 使用空数据，至少让应用可以运行
+            setData({ categories: [], assets: [] });
+            setLoading(false);
+            clearTimeout(timeoutId);
+          }
+        }
       }
     };
     
     if (!authLoading) {
       loadData();
+    } else {
+      // 如果认证还在加载，设置一个超时
+      const authTimeout = setTimeout(() => {
+        if (mounted && authLoading) {
+          console.warn('认证加载超时，继续加载数据');
+          loadData();
+        }
+      }, 5000);
+      
+      return () => {
+        clearTimeout(authTimeout);
+        clearTimeout(timeoutId);
+        mounted = false;
+      };
     }
     
     // Check hash for routing
@@ -53,7 +106,12 @@ const App: React.FC = () => {
     };
     checkHash();
     window.addEventListener('hashchange', checkHash);
-    return () => window.removeEventListener('hashchange', checkHash);
+    
+    return () => {
+      window.removeEventListener('hashchange', checkHash);
+      clearTimeout(timeoutId);
+      mounted = false;
+    };
   }, [authLoading, user]);
 
   const handleUpdateData = async (newData: AppData) => {

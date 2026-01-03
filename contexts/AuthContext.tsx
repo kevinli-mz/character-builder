@@ -38,31 +38,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+
+    // 设置超时，防止无限加载
+    timeoutId = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn('Auth loading timeout, proceeding anyway');
+        setLoading(false);
+      }
+    }, 10000); // 10秒超时
+
     // 获取初始会话
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (!mounted) return;
+      
+      if (error) {
+        console.error('获取会话错误:', error);
+        setLoading(false);
+        clearTimeout(timeoutId);
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
-        await checkAdminStatus(session.user.id);
+        try {
+          await checkAdminStatus(session.user.id);
+        } catch (error) {
+          console.error('检查管理员状态错误:', error);
+          // 即使检查失败也继续
+        }
       }
-      setLoading(false);
+      
+      if (mounted) {
+        setLoading(false);
+        clearTimeout(timeoutId);
+      }
+    }).catch((error) => {
+      console.error('获取会话异常:', error);
+      if (mounted) {
+        setLoading(false);
+        clearTimeout(timeoutId);
+      }
     });
 
     // 监听认证状态变化
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
+      
       setSession(session);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
-        await checkAdminStatus(session.user.id);
+        try {
+          await checkAdminStatus(session.user.id);
+        } catch (error) {
+          console.error('检查管理员状态错误:', error);
+          // 即使检查失败也继续
+        }
       } else {
         setIsAdmin(false);
       }
-      setLoading(false);
+      
+      if (mounted) {
+        setLoading(false);
+        clearTimeout(timeoutId);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email: string, password: string, displayName?: string) => {

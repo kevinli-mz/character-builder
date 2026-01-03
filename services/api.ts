@@ -6,22 +6,43 @@ import { supabase } from './supabase';
 // 从 Supabase 获取所有数据（分类和资产）- 全局共享，所有人都可以查看
 export async function fetchData(): Promise<AppData> {
   try {
+    // 添加超时控制
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Fetch timeout')), 8000);
+    });
+
     // 获取分类（全局，所有人可查看）
-    const { data: categoriesData, error: categoriesError } = await supabase
+    const categoriesPromise = supabase
       .from('categories')
       .select('*')
       .order('z_index', { ascending: true });
 
-    if (categoriesError) throw categoriesError;
+    const { data: categoriesData, error: categoriesError } = await Promise.race([
+      categoriesPromise,
+      timeoutPromise
+    ]) as any;
+
+    if (categoriesError) {
+      console.warn('获取分类失败:', categoriesError);
+      // 不抛出错误，返回空数组
+    }
 
     // 获取资产（全局，所有人可查看）
-    const { data: assetsData, error: assetsError } = await supabase
+    const assetsPromise = supabase
       .from('assets')
       .select('*');
 
-    if (assetsError) throw assetsError;
+    const { data: assetsData, error: assetsError } = await Promise.race([
+      assetsPromise,
+      timeoutPromise
+    ]) as any;
 
-    // 转换为应用格式
+    if (assetsError) {
+      console.warn('获取资产失败:', assetsError);
+      // 不抛出错误，继续使用空数组
+    }
+
+    // 转换为应用格式（即使数据为空也要处理）
     const categories: Category[] = (categoriesData || []).map((cat: any) => ({
       id: cat.id,
       name: cat.name,
@@ -39,6 +60,7 @@ export async function fetchData(): Promise<AppData> {
     return { categories, assets };
   } catch (error) {
     console.error('获取数据错误:', error);
+    // 确保总是返回有效的数据结构
     return { categories: [], assets: [] };
   }
 }

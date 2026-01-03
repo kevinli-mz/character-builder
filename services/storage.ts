@@ -85,20 +85,24 @@ export const getStoredData = async (): Promise<AppData> => {
     if (user) {
       // 用户已登录，从 Supabase 获取全局共享数据
       const data = await fetchData();
-      if (data.categories.length > 0 || data.assets.length > 0) {
-        return data;
+      
+      // 如果数据库完全为空（首次使用），且当前用户是管理员，初始化默认数据
+      if (data.categories.length === 0 && data.assets.length === 0) {
+        const { isAdmin } = await import('./admin');
+        const adminStatus = await isAdmin();
+        if (adminStatus) {
+          // 只有管理员在数据库完全为空时才初始化
+          // 这样可以确保后续加载时总是使用管理员设置的数据
+          console.log('数据库为空，管理员初始化默认数据');
+          await saveData(DEFAULT_DATA);
+          // 初始化后重新获取，确保返回保存的数据
+          return await fetchData();
+        }
       }
       
-      // 如果是管理员且没有数据，初始化默认数据
-      const { isAdmin } = await import('./admin');
-      const adminStatus = await isAdmin();
-      if (adminStatus) {
-        await saveData(DEFAULT_DATA);
-        return DEFAULT_DATA;
-      }
-      
-      // 普通用户返回默认数据（只读）
-      return DEFAULT_DATA;
+      // 始终返回从 Supabase 获取的数据（即使是空数据）
+      // 这样确保用户看到的是管理员在数据库中设置的数据，而不是代码中的硬编码默认值
+      return data;
     } else {
       // 用户未登录，使用本地存储作为后备
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -146,27 +150,34 @@ export const getStoredData = async (): Promise<AppData> => {
         }
       }
       
-      return DEFAULT_DATA;
+      // 未登录用户：返回空数据，不要使用硬编码的默认值
+      // 这样可以确保用户看到的是管理员设置的数据，而不是代码中的默认值
+      return { categories: [], assets: [] };
     }
   } catch (error) {
-    console.warn('获取数据失败，使用本地存储:', error);
+    console.warn('获取数据失败，尝试本地存储:', error);
     
-    // 回退到本地存储
+    // 只有在完全无法连接 Supabase 时才使用本地存储作为后备
+    // 但不要使用硬编码的 DEFAULT_DATA
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (parsed.categories && parsed.assets) return parsed;
+        if (parsed.categories && parsed.assets) {
+          return parsed;
+        }
       } catch (e) {
         console.error("Failed to parse stored data", e);
       }
     }
     
-    return DEFAULT_DATA;
+    // 如果所有后备都失败，返回空数据
+    // 这样用户会看到空白状态，而不是错误的默认数据
+    return { categories: [], assets: [] };
   }
 };
 
-// 同步版本（用于向后兼容）
+// 同步版本（用于向后兼容和超时后备）
 export const getStoredDataSync = (): AppData => {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored) {
@@ -177,7 +188,9 @@ export const getStoredDataSync = (): AppData => {
       console.error("Failed to parse stored data", e);
     }
   }
-  return DEFAULT_DATA;
+  // 超时后备：返回空数据而不是硬编码的默认值
+  // 这样可以避免显示错误的默认数据
+  return { categories: [], assets: [] };
 };
 
 // 保存数据到 Supabase（异步）

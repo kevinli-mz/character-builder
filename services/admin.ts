@@ -24,16 +24,24 @@ export async function isAdmin(): Promise<boolean> {
 // 获取用户的管理员状态（同步版本，从 session 中获取）
 export async function getUserAdminStatus(userId: string): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    // 添加超时控制，防止无限等待
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Timeout')), 5000);
+    });
+
+    const queryPromise = supabase
       .from('user_profiles')
       .select('is_admin')
       .eq('user_id', userId)
       .single();
 
+    const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
     if (error || !data) return false;
     return (data as any).is_admin === true;
   } catch (error) {
     console.error('获取管理员状态错误:', error);
+    // 超时或错误时返回 false，不影响应用运行
     return false;
   }
 }
