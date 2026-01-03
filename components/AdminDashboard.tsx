@@ -3,6 +3,8 @@ import { AppData, Asset, Category } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
 import { Upload, Trash2, ArrowUp, ArrowDown, FolderPlus, Image as ImageIcon, LogOut, CheckCircle, XCircle, GripVertical, Pencil, Star, MoreVertical, AlertTriangle } from 'lucide-react';
+import { uploadAssets, deleteAsset } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AdminDashboardProps {
   data: AppData;
@@ -36,6 +38,7 @@ interface RenameModalState {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, onLogout }) => {
+  const { signOut, user } = useAuth();
   const [activeTab, setActiveTab] = useState<'upload' | 'assets' | 'categories'>('upload');
   const [uploadCategory, setUploadCategory] = useState<string>(data.categories[0]?.id || '');
   const [isDragging, setIsDragging] = useState(false);
@@ -83,25 +86,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
     setDeleteModal({ isOpen: true, assetId: id, assetName: asset.name });
   };
 
-  const confirmDeleteAsset = () => {
+  const confirmDeleteAsset = async () => {
     const { assetId } = deleteModal;
-    const updatedAssets = data.assets.filter(a => a.id !== assetId);
     
-    // Also check if it was a default for any category and clear it
-    const updatedCategories = data.categories.map(c => {
-      if (c.defaultAssetId === assetId) {
-        return { ...c, defaultAssetId: undefined };
-      }
-      return c;
-    });
+    try {
+      // Delete from Supabase
+      await deleteAsset(assetId);
+      
+      // Update local state
+      const updatedAssets = data.assets.filter(a => a.id !== assetId);
+      
+      // Also check if it was a default for any category and clear it
+      const updatedCategories = data.categories.map(c => {
+        if (c.defaultAssetId === assetId) {
+          return { ...c, defaultAssetId: undefined };
+        }
+        return c;
+      });
 
-    onUpdate({
-      ...data,
-      assets: updatedAssets,
-      categories: updatedCategories
-    });
-    addToast("Asset deleted");
-    setDeleteModal(prev => ({ ...prev, isOpen: false }));
+      onUpdate({
+        ...data,
+        assets: updatedAssets,
+        categories: updatedCategories
+      });
+      addToast("资产已删除");
+    } catch (error) {
+      console.error('删除资产失败:', error);
+      addToast("删除失败，请重试", "error");
+    } finally {
+      setDeleteModal(prev => ({ ...prev, isOpen: false }));
+    }
   };
 
   const initiateRenameAsset = (id: string) => {
@@ -147,49 +161,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     
-    setIsProcessingUpload(true);
+    if (!uploadCategory) {
+      addToast("请先选择分类", "error");
+      return;
+    }
     
-    const fileReaders = Array.from(files).map(file => {
-      return new Promise<Asset | null>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const result = e.target?.result as string;
-          if (result) {
-            resolve({
-              id: crypto.randomUUID(),
-              name: file.name.split('.')[0],
-              categoryId: uploadCategory,
-              src: result
-            });
-          } else {
-            resolve(null);
-          }
-        };
-        reader.onerror = () => {
-          console.error(`Failed to read file: ${file.name}`);
-          resolve(null);
-        };
-        reader.readAsDataURL(file);
-      });
-    });
+    setIsProcessingUpload(true);
 
     try {
-      const results = await Promise.all(fileReaders);
-      const newAssets = results.filter((a): a is Asset => a !== null);
+      // 使用后端API上传文件
+      const fileArray = Array.from(files);
+      
+      // 验证文件类型
+      const validFiles = fileArray.filter(file => {
+        const isValid = file.type.startsWith('image/');
+        if (!isValid) {
+          addToast(`${file.name}: 不是有效的图片文件`, "error");
+        }
+        return isValid;
+      });
+
+      if (validFiles.length === 0) {
+        addToast("请选择有效的图片文件（PNG、SVG等）", "error");
+        setIsProcessingUpload(false);
+        return;
+      }
+
+      const newAssets = await uploadAssets(validFiles, uploadCategory);
       
       if (newAssets.length > 0) {
+        // 更新本地数据
         onUpdate({
           ...data,
           assets: [...data.assets, ...newAssets]
         });
-        addToast(`Successfully uploaded ${newAssets.length} asset(s)!`);
+        addToast(`成功上传 ${newAssets.length} 个资产！`);
         setActiveTab('assets'); 
       } else {
-        addToast("No valid files found to upload.", "error");
+        addToast("上传失败：没有文件成功上传。请检查控制台错误信息。", "error");
       }
     } catch (error) {
-      console.error("Upload process error", error);
-      addToast("An error occurred during upload.", "error");
+      console.error("上传错误", error);
+      const errorMessage = error instanceof Error ? error.message : "上传失败，请重试";
+      addToast(errorMessage, "error");
+      
+      // 如果是 bucket 不存在，提供更详细的提示
+      if (errorMessage.includes('bucket') || errorMessage.includes('Bucket')) {
+        setTimeout(() => {
+          alert('请确保在 Supabase Dashboard 中创建了名为 "character-assets" 的 Storage bucket。\n\n步骤：\n1. 进入 Supabase Dashboard\n2. 点击 Storage\n3. 创建新 bucket，名称为 "character-assets"\n4. 设置为 Public（或配置适当的策略）');
+        }, 500);
+      }
     } finally {
       setIsProcessingUpload(false);
       if (fileInputRef.current) {
@@ -393,15 +414,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
 
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-stone-200 px-8 py-4 flex items-center justify-between sticky top-0 z-50">
-        <h1 className="text-xl font-bold text-stone-800 flex items-center gap-2">
-          <span className="bg-emerald-400 text-white p-1.5 rounded-lg rotate-3 shadow-sm">CP</span>
-          Admin Dashboard
-        </h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-bold text-stone-800 flex items-center gap-2">
+            <span className="bg-emerald-400 text-white p-1.5 rounded-lg rotate-3 shadow-sm">CP</span>
+            管理面板
+          </h1>
+          {user && (
+            <span className="text-sm text-stone-500">
+              {user.email}
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
            <Button variant="secondary" onClick={() => window.location.hash = ''}>
              View Public Site
            </Button>
-           <Button variant="ghost" onClick={onLogout} title="Logout">
+           <Button variant="ghost" onClick={async () => { await signOut(); onLogout(); }} title="Logout">
             <LogOut className="w-5 h-5" />
           </Button>
         </div>
