@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppData, Asset, Category } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
-import { Upload, Trash2, ArrowUp, ArrowDown, FolderPlus, Image as ImageIcon, LogOut, CheckCircle, XCircle, GripVertical, Pencil, Star, MoreVertical, AlertTriangle } from 'lucide-react';
+import { Upload, Trash2, ArrowUp, ArrowDown, FolderPlus, Image as ImageIcon, LogOut, CheckCircle, XCircle, GripVertical, Pencil, Star, MoreVertical, AlertTriangle, Users, Shield } from 'lucide-react';
 import { uploadAssets, deleteAsset } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { getAllUsers, updateUserAdminStatus } from '../services/admin';
 
 interface AdminDashboardProps {
   data: AppData;
@@ -39,13 +40,15 @@ interface RenameModalState {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, onLogout }) => {
   const { signOut, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'upload' | 'assets' | 'categories'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'assets' | 'categories' | 'users'>('upload');
   const [uploadCategory, setUploadCategory] = useState<string>(data.categories[0]?.id || '');
   const [isDragging, setIsDragging] = useState(false);
   const [draggedAssetId, setDraggedAssetId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
+  const [users, setUsers] = useState<Array<{ user_id: string; email: string; display_name: string | null; is_admin: boolean; created_at: string }>>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
   
   // Modal States
   const [deleteModal, setDeleteModal] = useState<DeleteModalState>({ isOpen: false, assetId: '', assetName: '' });
@@ -68,6 +71,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
       setTimeout(() => renameInputRef.current?.select(), 100);
     }
   }, [renameModal.isOpen]);
+
+  // Load users when users tab is active
+  useEffect(() => {
+    if (activeTab === 'users') {
+      loadUsers();
+    }
+  }, [activeTab]);
+
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const usersList = await getAllUsers();
+      setUsers(usersList);
+    } catch (error) {
+      console.error('加载用户列表失败:', error);
+      addToast('加载用户列表失败', 'error');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleToggleAdmin = async (userId: string, currentStatus: boolean) => {
+    try {
+      await updateUserAdminStatus(userId, !currentStatus);
+      setUsers(users.map(u => u.user_id === userId ? { ...u, is_admin: !currentStatus } : u));
+      addToast(`管理员状态已${!currentStatus ? '授予' : '撤销'}`);
+    } catch (error) {
+      console.error('更新管理员状态失败:', error);
+      addToast('更新管理员状态失败', 'error');
+    }
+  };
 
   // --- Notification Helpers ---
   const addToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -459,6 +493,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
           >
             <FolderPlus className="w-4 h-4 mr-3" /> Layers
           </Button>
+          <Button 
+            variant={activeTab === 'users' ? 'primary' : 'ghost'} 
+            className="justify-start w-full" 
+            onClick={() => setActiveTab('users')}
+          >
+            <Users className="w-4 h-4 mr-3" /> 用户管理
+          </Button>
         </nav>
 
         {/* Main Content */}
@@ -672,6 +713,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* USERS TAB */}
+          {activeTab === 'users' && (
+            <div className="max-w-4xl mx-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-stone-800">用户管理</h2>
+                <Button onClick={loadUsers} disabled={loadingUsers}>
+                  <Users className="w-4 h-4 mr-2" /> 刷新
+                </Button>
+              </div>
+
+              {loadingUsers ? (
+                <div className="text-center py-20 text-stone-400">
+                  <div className="animate-spin h-8 w-8 border-4 border-emerald-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p>加载中...</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-stone-50 border-b border-stone-200">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-sm font-bold text-stone-700">邮箱</th>
+                          <th className="px-6 py-4 text-left text-sm font-bold text-stone-700">显示名称</th>
+                          <th className="px-6 py-4 text-left text-sm font-bold text-stone-700">注册时间</th>
+                          <th className="px-6 py-4 text-center text-sm font-bold text-stone-700">管理员</th>
+                          <th className="px-6 py-4 text-center text-sm font-bold text-stone-700">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {users.map((u) => (
+                          <tr key={u.user_id} className="hover:bg-stone-50 transition-colors">
+                            <td className="px-6 py-4 text-sm text-stone-800">{u.email}</td>
+                            <td className="px-6 py-4 text-sm text-stone-600">{u.display_name || '-'}</td>
+                            <td className="px-6 py-4 text-sm text-stone-500">
+                              {new Date(u.created_at).toLocaleDateString('zh-CN')}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              {u.is_admin ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
+                                  <Shield className="w-3 h-3" /> 是
+                                </span>
+                              ) : (
+                                <span className="text-stone-400 text-xs">否</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              {u.user_id !== user?.id && (
+                                <Button
+                                  size="sm"
+                                  variant={u.is_admin ? "secondary" : "primary"}
+                                  onClick={() => handleToggleAdmin(u.user_id, u.is_admin)}
+                                >
+                                  {u.is_admin ? '撤销管理员' : '设为管理员'}
+                                </Button>
+                              )}
+                              {u.user_id === user?.id && (
+                                <span className="text-xs text-stone-400">当前用户</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {users.length === 0 && (
+                      <div className="text-center py-20 text-stone-400">
+                        <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>暂无用户</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

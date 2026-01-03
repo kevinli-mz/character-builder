@@ -3,40 +3,33 @@ import { supabase } from './supabase';
 
 // 注意：getUserId 函数已移除，直接使用 await supabase.auth.getUser() 获取用户
 
-// 从 Supabase 获取所有数据（分类和资产）
+// 从 Supabase 获取所有数据（分类和资产）- 全局共享，所有人都可以查看
 export async function fetchData(): Promise<AppData> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return { categories: [], assets: [] };
-    }
-
-    // 获取分类
+    // 获取分类（全局，所有人可查看）
     const { data: categoriesData, error: categoriesError } = await supabase
       .from('categories')
       .select('*')
-      .eq('user_id', user.id)
       .order('z_index', { ascending: true });
 
     if (categoriesError) throw categoriesError;
 
-    // 获取资产
+    // 获取资产（全局，所有人可查看）
     const { data: assetsData, error: assetsError } = await supabase
       .from('assets')
-      .select('*')
-      .eq('user_id', user.id);
+      .select('*');
 
     if (assetsError) throw assetsError;
 
     // 转换为应用格式
-    const categories: Category[] = (categoriesData || []).map(cat => ({
+    const categories: Category[] = (categoriesData || []).map((cat: any) => ({
       id: cat.id,
       name: cat.name,
       zIndex: cat.z_index,
       defaultAssetId: cat.default_asset_id || undefined
     }));
 
-    const assets: Asset[] = (assetsData || []).map(asset => ({
+    const assets: Asset[] = (assetsData || []).map((asset: any) => ({
       id: asset.id,
       name: asset.name,
       categoryId: asset.category_id,
@@ -50,12 +43,19 @@ export async function fetchData(): Promise<AppData> {
   }
 }
 
-// 保存数据到 Supabase
+// 保存数据到 Supabase（仅管理员可用）
 export async function saveData(data: AppData): Promise<boolean> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       throw new Error('用户未登录');
+    }
+
+    // 检查是否是管理员
+    const { isAdmin } = await import('./admin');
+    const adminStatus = await isAdmin();
+    if (!adminStatus) {
+      throw new Error('只有管理员可以编辑资产和分类');
     }
 
     // 保存分类
@@ -64,12 +64,12 @@ export async function saveData(data: AppData): Promise<boolean> {
         .from('categories')
         .upsert({
           id: category.id,
-          user_id: user.id,
           name: category.name,
           z_index: category.zIndex,
-          default_asset_id: category.defaultAssetId || null
-        }, {
-          onConflict: 'id,user_id'
+          default_asset_id: category.defaultAssetId || null,
+          created_by: user.id
+        } as any, {
+          onConflict: 'id'
         });
 
       if (error) throw error;
@@ -79,19 +79,17 @@ export async function saveData(data: AppData): Promise<boolean> {
     const categoryIds = new Set(data.categories.map(c => c.id));
     const { data: existingCategories } = await supabase
       .from('categories')
-      .select('id')
-      .eq('user_id', user.id);
+      .select('id');
 
     if (existingCategories) {
-      const toDelete = existingCategories
-        .filter(c => !categoryIds.has(c.id))
-        .map(c => c.id);
+      const toDelete = (existingCategories as any[])
+        .filter((c: any) => !categoryIds.has(c.id))
+        .map((c: any) => c.id);
 
       if (toDelete.length > 0) {
         await supabase
           .from('categories')
           .delete()
-          .eq('user_id', user.id)
           .in('id', toDelete);
       }
     }
@@ -103,19 +101,18 @@ export async function saveData(data: AppData): Promise<boolean> {
         .from('assets')
         .select('storage_path')
         .eq('id', asset.id)
-        .eq('user_id', user.id)
         .single();
 
       const { error } = await supabase
         .from('assets')
         .upsert({
           id: asset.id,
-          user_id: user.id,
           category_id: asset.categoryId,
           name: asset.name,
-          storage_path: existingAsset?.storage_path || `assets/${user.id}/${asset.id}`,
-          public_url: asset.src
-        }, {
+          storage_path: (existingAsset as any)?.storage_path || `assets/${asset.id}`,
+          public_url: asset.src,
+          created_by: user.id
+        } as any, {
           onConflict: 'id'
         });
 
@@ -126,19 +123,17 @@ export async function saveData(data: AppData): Promise<boolean> {
     const assetIds = new Set(data.assets.map(a => a.id));
     const { data: existingAssets } = await supabase
       .from('assets')
-      .select('id')
-      .eq('user_id', user.id);
+      .select('id');
 
     if (existingAssets) {
-      const toDelete = existingAssets
-        .filter(a => !assetIds.has(a.id))
-        .map(a => a.id);
+      const toDelete = (existingAssets as any[])
+        .filter((a: any) => !assetIds.has(a.id))
+        .map((a: any) => a.id);
 
       if (toDelete.length > 0) {
         await supabase
           .from('assets')
           .delete()
-          .eq('user_id', user.id)
           .in('id', toDelete);
       }
     }
@@ -150,12 +145,19 @@ export async function saveData(data: AppData): Promise<boolean> {
   }
 }
 
-// 上传资产文件到 Supabase Storage
+// 上传资产文件到 Supabase Storage（仅管理员可用）
 export async function uploadAssets(files: File[], categoryId: string): Promise<AppData['assets']> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       throw new Error('用户未登录');
+    }
+
+    // 检查是否是管理员
+    const { isAdmin } = await import('./admin');
+    const adminStatus = await isAdmin();
+    if (!adminStatus) {
+      throw new Error('只有管理员可以上传资产');
     }
 
     const uploadedAssets: Asset[] = [];
@@ -171,7 +173,7 @@ export async function uploadAssets(files: File[], categoryId: string): Promise<A
 
         // 生成唯一ID
         const assetId = `${categoryId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const storagePath = `assets/${user.id}/${categoryId}/${assetId}`;
+        const storagePath = `assets/${categoryId}/${assetId}`;
 
         // 上传到 Supabase Storage
         const { error: uploadError } = await supabase.storage
@@ -205,12 +207,12 @@ export async function uploadAssets(files: File[], categoryId: string): Promise<A
           .from('assets')
           .insert({
             id: assetId,
-            user_id: user.id,
             category_id: categoryId,
             name: file.name.replace(/\.[^/.]+$/, ''), // 移除扩展名
             storage_path: storagePath,
-            public_url: publicUrl
-          });
+            public_url: publicUrl,
+            created_by: user.id
+          } as any);
 
         if (dbError) {
           console.error('保存资产到数据库错误:', dbError);
@@ -254,7 +256,7 @@ export async function uploadAssets(files: File[], categoryId: string): Promise<A
   }
 }
 
-// 删除资产
+// 删除资产（仅管理员可用）
 export async function deleteAsset(assetId: string): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -262,29 +264,34 @@ export async function deleteAsset(assetId: string): Promise<void> {
       throw new Error('用户未登录');
     }
 
+    // 检查是否是管理员
+    const { isAdmin } = await import('./admin');
+    const adminStatus = await isAdmin();
+    if (!adminStatus) {
+      throw new Error('只有管理员可以删除资产');
+    }
+
     // 获取资产信息
     const { data: asset, error: fetchError } = await supabase
       .from('assets')
       .select('storage_path')
       .eq('id', assetId)
-      .eq('user_id', user.id)
       .single();
 
     if (fetchError) throw fetchError;
 
     // 从存储中删除文件
-    if (asset?.storage_path) {
+    if (asset && (asset as any).storage_path) {
       await supabase.storage
         .from('character-assets')
-        .remove([asset.storage_path]);
+        .remove([(asset as any).storage_path]);
     }
 
     // 从数据库中删除
     const { error: deleteError } = await supabase
       .from('assets')
       .delete()
-      .eq('id', assetId)
-      .eq('user_id', user.id);
+      .eq('id', assetId);
 
     if (deleteError) throw deleteError;
   } catch (error) {
@@ -307,12 +314,12 @@ export async function saveCharacter(characterState: CharacterState, name?: strin
         user_id: user.id,
         character_state: characterState,
         name: name || null
-      })
+      } as any)
       .select('id')
       .single();
 
     if (error) throw error;
-    return data.id;
+    return (data as any).id;
   } catch (error) {
     console.error('保存角色错误:', error);
     throw error;
@@ -335,7 +342,7 @@ export async function getCharacter(characterId: string): Promise<CharacterState>
       .single();
 
     if (error) throw error;
-    return data.character_state as CharacterState;
+    return (data as any).character_state as CharacterState;
   } catch (error) {
     console.error('获取角色错误:', error);
     throw error;
@@ -357,7 +364,7 @@ export async function getUserCharacters(): Promise<Array<{ id: string; name: str
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    return (data || []) as Array<{ id: string; name: string | null; created_at: string }>;
   } catch (error) {
     console.error('获取角色列表错误:', error);
     return [];

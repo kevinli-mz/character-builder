@@ -3,22 +3,45 @@ import { AppData, View } from './types';
 import { getStoredData, saveStoredData } from './services/storage';
 import { Configurator } from './components/Configurator';
 import { AdminDashboard } from './components/AdminDashboard';
-import { Button } from './components/ui/Button';
-
-// Mock password for demo
-const ADMIN_PASSWORD = "admin";
+import { Auth } from './components/Auth';
+import { useAuth } from './contexts/AuthContext';
 
 const App: React.FC = () => {
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const [view, setView] = useState<View>(View.CONFIGURATOR);
   const [data, setData] = useState<AppData>({ categories: [], assets: [] });
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Load data on mount
+  // Debug: Check environment variables in production
   useEffect(() => {
-    const stored = getStoredData();
-    setData(stored);
-    setLoading(false);
+    if (import.meta.env.MODE === 'production') {
+      console.log('Environment check:', {
+        hasSupabaseUrl: !!import.meta.env.VITE_SUPABASE_URL,
+        hasSupabaseKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+        mode: import.meta.env.MODE
+      });
+    }
+  }, []);
+
+  // Load data on mount and when user changes
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const stored = await getStoredData();
+        setData(stored);
+      } catch (error) {
+        console.error('加载数据失败:', error);
+        // 使用同步版本作为后备
+        const { getStoredDataSync } = await import('./services/storage');
+        setData(getStoredDataSync());
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if (!authLoading) {
+      loadData();
+    }
     
     // Check hash for routing
     const checkHash = () => {
@@ -31,63 +54,66 @@ const App: React.FC = () => {
     checkHash();
     window.addEventListener('hashchange', checkHash);
     return () => window.removeEventListener('hashchange', checkHash);
-  }, []);
+  }, [authLoading, user]);
 
-  const handleUpdateData = (newData: AppData) => {
+  const handleUpdateData = async (newData: AppData) => {
     setData(newData);
-    saveStoredData(newData);
-  };
-
-  const handleAdminLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const input = (document.getElementById('password') as HTMLInputElement).value;
-    if (input === ADMIN_PASSWORD) {
-      setIsAuthenticated(true);
-    } else {
-      alert("Invalid password. Try 'admin'");
+    try {
+      await saveStoredData(newData);
+    } catch (error) {
+      console.error('保存数据失败:', error);
+      // 即使保存失败，也更新本地状态
     }
   };
 
-  if (loading) {
-      return <div className="h-screen w-screen flex items-center justify-center bg-slate-50 text-slate-400">Loading...</div>;
+  // Show loading state
+  if (authLoading || loading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#fdfbf7] text-stone-400">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-400 rounded-2xl mb-4 rotate-3 animate-pulse">
+            <span className="text-white font-bold text-2xl">CP</span>
+          </div>
+          <p>加载中...</p>
+        </div>
+      </div>
+    );
   }
 
-  // Admin View
+  // Show auth if not logged in
+  if (!user) {
+    return <Auth />;
+  }
+
+  // Admin View (only for admins)
   if (view === View.ADMIN) {
-    if (!isAuthenticated) {
+    if (!isAdmin) {
+      // Redirect non-admins back to configurator
+      window.location.hash = '';
       return (
-        <div className="h-screen flex items-center justify-center bg-gray-50">
-          <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg border">
-            <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Admin Access</h2>
-            <form onSubmit={handleAdminLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Password</label>
-                <input 
-                  id="password" 
-                  type="password" 
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border" 
-                  placeholder="Enter 'admin'"
-                />
-              </div>
-              <Button type="submit" className="w-full">Login</Button>
-            </form>
-            <div className="mt-4 text-center">
-                <a href="#" className="text-sm text-indigo-600 hover:underline">Back to Configurator</a>
-            </div>
+        <div className="h-screen flex items-center justify-center bg-[#fdfbf7]">
+          <div className="text-center">
+            <p className="text-stone-600 mb-4">您没有管理员权限</p>
+            <button 
+              onClick={() => window.location.hash = ''}
+              className="text-emerald-600 hover:underline"
+            >
+              返回配置器
+            </button>
           </div>
         </div>
       );
     }
-    return <AdminDashboard data={data} onUpdate={handleUpdateData} onLogout={() => setIsAuthenticated(false)} />;
+    return <AdminDashboard data={data} onUpdate={handleUpdateData} onLogout={() => {}} />;
   }
 
-  // Public View
+  // Public View (all authenticated users can use, but only admins see admin button)
   return (
     <Configurator 
       data={data} 
-      onAdminClick={() => {
+      onAdminClick={isAdmin ? () => {
           window.location.hash = 'admin';
-      }} 
+      } : undefined} 
     />
   );
 };

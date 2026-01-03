@@ -1,0 +1,72 @@
+import { supabase } from './supabase';
+
+// 检查当前用户是否是管理员
+export async function isAdmin(): Promise<boolean> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('is_admin')
+      .eq('user_id', user.id)
+      .single();
+
+    if (error || !data) return false;
+    const profile = data as { is_admin: boolean };
+    return profile.is_admin === true;
+  } catch (error) {
+    console.error('检查管理员状态错误:', error);
+    return false;
+  }
+}
+
+// 获取用户的管理员状态（同步版本，从 session 中获取）
+export async function getUserAdminStatus(userId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('is_admin')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) return false;
+    return (data as any).is_admin === true;
+  } catch (error) {
+    console.error('获取管理员状态错误:', error);
+    return false;
+  }
+}
+
+// 获取所有用户（仅管理员可用）
+export async function getAllUsers() {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('user_id, email, display_name, is_admin, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as Array<{ user_id: string; email: string; display_name: string | null; is_admin: boolean; created_at: string }>;
+  } catch (error) {
+    console.error('获取用户列表错误:', error);
+    throw error;
+  }
+}
+
+// 更新用户的管理员状态（仅管理员可用）
+export async function updateUserAdminStatus(userId: string, isAdmin: boolean): Promise<void> {
+  try {
+    // Use raw SQL or bypass type checking
+    const { error } = await (supabase
+      .from('user_profiles')
+      .update({ is_admin: isAdmin } as never)
+      .eq('user_id', userId) as any);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error('更新管理员状态错误:', error);
+    throw error;
+  }
+}
+

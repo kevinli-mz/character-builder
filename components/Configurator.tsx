@@ -6,7 +6,7 @@ import { Download, Shuffle, RotateCcw, Lock } from 'lucide-react';
 
 interface ConfiguratorProps {
   data: AppData;
-  onAdminClick: () => void;
+  onAdminClick?: () => void;
 }
 
 export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick }) => {
@@ -123,7 +123,9 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick }
            <span className="bg-emerald-400 text-white px-2 py-0.5 rounded-lg rotate-3 text-sm">CP</span>
            Builder
         </h1>
-        <Button size="sm" variant="ghost" onClick={onAdminClick}><Lock className="w-4 h-4"/></Button>
+        {onAdminClick && (
+          <Button size="sm" variant="ghost" onClick={onAdminClick}><Lock className="w-4 h-4"/></Button>
+        )}
       </div>
 
       {/* LEFT: Controls & Assets */}
@@ -204,11 +206,13 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick }
       <div className="flex-1 relative flex flex-col items-center justify-center p-8 order-1 md:order-2 h-1/2 md:h-full bg-[#fdfbf7] bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px]">
         
         {/* Desktop Admin Link */}
-        <div className="hidden md:block absolute top-8 right-8">
-           <Button variant="ghost" size="sm" className="text-stone-400 hover:text-emerald-500" onClick={onAdminClick}>
-             Admin Access
-           </Button>
-        </div>
+        {onAdminClick && (
+          <div className="hidden md:block absolute top-8 right-8">
+            <Button variant="ghost" size="sm" className="text-stone-400 hover:text-emerald-500" onClick={onAdminClick}>
+              Admin Access
+            </Button>
+          </div>
+        )}
 
         {/* Canvas Wrapper */}
         <div className="relative w-full max-w-lg aspect-square">
