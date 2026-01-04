@@ -455,3 +455,125 @@ export async function getUserCharacters(): Promise<Array<{ id: string; name: str
     return [];
   }
 }
+
+// 删除所有占位符资产（仅管理员可用）
+// 占位符资产是指代码中定义的 DEFAULT_DATA 中的资产
+export async function deleteStockAssets(): Promise<{ deleted: string[]; errors: string[] }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('用户未登录');
+    }
+
+    // 检查是否是管理员
+    const { isAdmin } = await import('./admin');
+    const adminStatus = await isAdmin();
+    if (!adminStatus) {
+      throw new Error('只有管理员可以删除占位符资产');
+    }
+
+    // 定义所有占位符资产的 ID（来自 DEFAULT_DATA）
+    const stockAssetIds = new Set([
+      'bg-1',      // Blue Sky
+      'bg-2',      // Sunset
+      'body-1',    // Standard Body
+      'skin-1',    // Light
+      'skin-2',    // Dark
+      'face-1',    // Smile
+      'hair-1',    // Spiky
+      'hand-1',    // Waving
+      'acc-1'      // Star Pin
+    ]);
+
+    // 获取所有资产
+    const { data: allAssets, error: fetchError } = await supabase
+      .from('assets')
+      .select('id, public_url, storage_path');
+
+    if (fetchError) throw fetchError;
+
+    const deleted: string[] = [];
+    const errors: string[] = [];
+
+    // 识别并删除占位符资产
+    // 占位符资产的特征：
+    // 1. ID 在 stockAssetIds 列表中（明确的占位符 ID）
+    // 2. 或者 public_url 是 data: URL（内联 base64 数据，不是上传的文件）
+    // 注意：手动上传的资产会有 http/https URL（来自 Supabase Storage）
+    for (const asset of (allAssets || [])) {
+      const assetId = (asset as any).id;
+      const publicUrl = (asset as any).public_url || '';
+      const storagePath = (asset as any).storage_path || '';
+
+      // 检查是否是占位符资产
+      // 方法1: ID 在已知占位符列表中
+      const isKnownStockId = stockAssetIds.has(assetId);
+      
+      // 方法2: public_url 是 data: URL（内联数据，不是上传的文件）
+      // 手动上传的文件会有 http/https URL
+      const isDataUrl = publicUrl.startsWith('data:image/');
+      
+      // 方法3: 检查 storage_path - 占位符资产通常没有有效的 storage_path
+      // 或者 storage_path 是占位符路径（如 assets/bg-1）
+      // 手动上传的文件会有完整的路径（如 assets/background/1234567890-abc123）
+      const hasRealStoragePath = storagePath && 
+                                 storagePath.includes('/') && 
+                                 storagePath.split('/').length >= 3 && // 至少 3 层路径
+                                 !stockAssetIds.has(assetId.split('-')[0]); // 不是占位符 ID 格式
+
+      // 如果是已知占位符 ID 或者是 data URL，且没有真实的上传路径，则删除
+      const isStockAsset = (isKnownStockId || isDataUrl) && !hasRealStoragePath;
+
+      if (isStockAsset) {
+        try {
+          // 从数据库中删除
+          const { error: deleteError } = await supabase
+            .from('assets')
+            .delete()
+            .eq('id', assetId);
+
+          if (deleteError) {
+            errors.push(`${assetId}: ${deleteError.message}`);
+          } else {
+            deleted.push(assetId);
+            console.log(`已删除占位符资产: ${assetId} (${(asset as any).name || 'unnamed'})`);
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : '未知错误';
+          errors.push(`${assetId}: ${errorMsg}`);
+          console.error(`删除资产 ${assetId} 失败:`, error);
+        }
+      } else {
+        // 记录跳过的资产（用于调试）
+        console.log(`保留资产: ${assetId} (原因: ${hasRealStoragePath ? '有真实存储路径' : '不在占位符列表中'})`);
+      }
+    }
+
+    // 清理分类中对已删除占位符资产的默认引用
+    if (deleted.length > 0) {
+      const { data: categories } = await supabase
+        .from('categories')
+        .select('id, default_asset_id');
+
+      if (categories) {
+        const deletedSet = new Set(deleted);
+        for (const category of categories) {
+          const defaultAssetId = (category as any).default_asset_id;
+          if (defaultAssetId && deletedSet.has(defaultAssetId)) {
+            // 清除默认资产引用
+            await supabase
+              .from('categories')
+              .update({ default_asset_id: null } as never)
+              .eq('id', (category as any).id);
+            console.log(`已清除分类 ${(category as any).id} 的默认资产引用`);
+          }
+        }
+      }
+    }
+
+    return { deleted, errors };
+  } catch (error) {
+    console.error('删除占位符资产错误:', error);
+    throw error;
+  }
+}

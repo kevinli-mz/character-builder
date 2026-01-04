@@ -49,6 +49,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [users, setUsers] = useState<Array<{ user_id: string; email: string; display_name: string | null; is_admin: boolean; created_at: string }>>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [isDeletingStock, setIsDeletingStock] = useState(false);
   
   // Modal States
   const [deleteModal, setDeleteModal] = useState<DeleteModalState>({ isOpen: false, assetId: '', assetName: '' });
@@ -100,6 +101,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
     } catch (error) {
       console.error('更新管理员状态失败:', error);
       addToast('更新管理员状态失败', 'error');
+    }
+  };
+
+  const handleDeleteStockAssets = async () => {
+    if (!window.confirm('确定要删除所有占位符资产吗？\n\n这将删除代码中定义的默认资产（如 Blue Sky, Standard Body 等），但不会删除您手动上传的资产。\n\n此操作无法撤销！')) {
+      return;
+    }
+
+    setIsDeletingStock(true);
+    try {
+      const { deleteStockAssets } = await import('../services/api');
+      const result = await deleteStockAssets();
+      
+      if (result.errors.length > 0) {
+        console.warn('删除过程中有错误:', result.errors);
+        addToast(`已删除 ${result.deleted.length} 个占位符资产，但有 ${result.errors.length} 个错误`, 'error');
+      } else {
+        addToast(`成功删除 ${result.deleted.length} 个占位符资产`);
+      }
+
+      // 重新加载数据以更新 UI
+      const { fetchData } = await import('../services/api');
+      const updatedData = await fetchData();
+      onUpdate(updatedData);
+    } catch (error) {
+      console.error('删除占位符资产失败:', error);
+      addToast('删除失败，请重试', 'error');
+    } finally {
+      setIsDeletingStock(false);
     }
   };
 
@@ -555,6 +585,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
           >
             <Users className="w-4 h-4 mr-3" /> 用户管理
           </Button>
+          <div className="mt-auto pt-4 border-t border-stone-200">
+            <Button 
+              variant="ghost" 
+              className="justify-start w-full text-rose-500 hover:text-rose-600 hover:bg-rose-50" 
+              onClick={handleDeleteStockAssets}
+              disabled={isDeletingStock}
+            >
+              <Trash2 className="w-4 h-4 mr-3" /> 
+              {isDeletingStock ? '删除中...' : '删除占位符资产'}
+            </Button>
+          </div>
         </nav>
 
         {/* Main Content */}
