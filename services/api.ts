@@ -66,6 +66,8 @@ export async function fetchData(): Promise<AppData> {
 }
 
 // 保存数据到 Supabase（仅管理员可用）
+// 注意：此函数只进行 upsert，不会删除任何数据
+// 如果需要删除，请使用专门的删除函数
 export async function saveData(data: AppData): Promise<boolean> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -80,7 +82,7 @@ export async function saveData(data: AppData): Promise<boolean> {
       throw new Error('只有管理员可以编辑资产和分类');
     }
 
-    // 保存分类
+    // 保存分类（只 upsert，不删除）
     for (const category of data.categories) {
       const { error } = await supabase
         .from('categories')
@@ -94,29 +96,13 @@ export async function saveData(data: AppData): Promise<boolean> {
           onConflict: 'id'
         });
 
-      if (error) throw error;
-    }
-
-    // 删除不存在的分类
-    const categoryIds = new Set(data.categories.map(c => c.id));
-    const { data: existingCategories } = await supabase
-      .from('categories')
-      .select('id');
-
-    if (existingCategories) {
-      const toDelete = (existingCategories as any[])
-        .filter((c: any) => !categoryIds.has(c.id))
-        .map((c: any) => c.id);
-
-      if (toDelete.length > 0) {
-        await supabase
-          .from('categories')
-          .delete()
-          .in('id', toDelete);
+      if (error) {
+        console.error('保存分类错误:', category.id, error);
+        throw error;
       }
     }
 
-    // 保存资产
+    // 保存资产（只 upsert，不删除）
     for (const asset of data.assets) {
       // 查找对应的数据库记录以获取 storage_path
       const { data: existingAsset } = await supabase
@@ -138,31 +124,108 @@ export async function saveData(data: AppData): Promise<boolean> {
           onConflict: 'id'
         });
 
-      if (error) throw error;
-    }
-
-    // 删除不存在的资产
-    const assetIds = new Set(data.assets.map(a => a.id));
-    const { data: existingAssets } = await supabase
-      .from('assets')
-      .select('id');
-
-    if (existingAssets) {
-      const toDelete = (existingAssets as any[])
-        .filter((a: any) => !assetIds.has(a.id))
-        .map((a: any) => a.id);
-
-      if (toDelete.length > 0) {
-        await supabase
-          .from('assets')
-          .delete()
-          .in('id', toDelete);
+      if (error) {
+        console.error('保存资产错误:', asset.id, error);
+        throw error;
       }
     }
 
     return true;
   } catch (error) {
     console.error('保存数据错误:', error);
+    throw error;
+  }
+}
+
+// 更新单个分类（用于重命名、设置默认值等）
+export async function updateCategory(categoryId: string, updates: { name?: string; z_index?: number; default_asset_id?: string | null }): Promise<boolean> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('用户未登录');
+    }
+
+    const { isAdmin } = await import('./admin');
+    const adminStatus = await isAdmin();
+    if (!adminStatus) {
+      throw new Error('只有管理员可以编辑分类');
+    }
+
+    const { error } = await (supabase
+      .from('categories')
+      .update(updates as never)
+      .eq('id', categoryId) as any);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('更新分类错误:', error);
+    throw error;
+  }
+}
+
+// 更新单个资产（用于重命名等）
+export async function updateAsset(assetId: string, updates: { name?: string; category_id?: string }): Promise<boolean> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('用户未登录');
+    }
+
+    const { isAdmin } = await import('./admin');
+    const adminStatus = await isAdmin();
+    if (!adminStatus) {
+      throw new Error('只有管理员可以编辑资产');
+    }
+
+    const { error } = await (supabase
+      .from('assets')
+      .update(updates as never)
+      .eq('id', assetId) as any);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('更新资产错误:', error);
+    throw error;
+  }
+}
+
+// 删除分类（会同时删除该分类下的所有资产）
+export async function deleteCategory(categoryId: string): Promise<boolean> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('用户未登录');
+    }
+
+    const { isAdmin } = await import('./admin');
+    const adminStatus = await isAdmin();
+    if (!adminStatus) {
+      throw new Error('只有管理员可以删除分类');
+    }
+
+    // 先删除该分类下的所有资产
+    const { error: assetsError } = await supabase
+      .from('assets')
+      .delete()
+      .eq('category_id', categoryId);
+
+    if (assetsError) {
+      console.error('删除分类资产错误:', assetsError);
+      throw assetsError;
+    }
+
+    // 然后删除分类
+    const { error: categoryError } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', categoryId);
+
+    if (categoryError) throw categoryError;
+    return true;
+  } catch (error) {
+    console.error('删除分类错误:', error);
     throw error;
   }
 }

@@ -23,7 +23,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Load data on mount and when user changes
+  // Load data on mount - only reload when user actually changes (not on every auth state change)
   useEffect(() => {
     let mounted = true;
     let timeoutId: NodeJS.Timeout;
@@ -112,7 +112,7 @@ const App: React.FC = () => {
       clearTimeout(timeoutId);
       mounted = false;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user?.id]); // 只依赖 user.id，而不是整个 user 对象
 
   const handleUpdateData = async (newData: AppData) => {
     setData(newData);

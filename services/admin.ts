@@ -1,24 +1,68 @@
 import { supabase } from './supabase';
 
-// 检查当前用户是否是管理员
+// 缓存管理员状态，避免频繁查询
+let adminStatusCache: { userId: string | null; isAdmin: boolean; timestamp: number } = {
+  userId: null,
+  isAdmin: false,
+  timestamp: 0
+};
+
+const CACHE_DURATION = 60000; // 缓存 60 秒
+
+// 检查当前用户是否是管理员（带缓存）
 export async function isAdmin(): Promise<boolean> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
+    if (!user) {
+      adminStatusCache = { userId: null, isAdmin: false, timestamp: 0 };
+      return false;
+    }
 
-    const { data, error } = await supabase
+    // 检查缓存
+    const now = Date.now();
+    if (
+      adminStatusCache.userId === user.id &&
+      now - adminStatusCache.timestamp < CACHE_DURATION
+    ) {
+      return adminStatusCache.isAdmin;
+    }
+
+    // 添加超时控制
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Admin check timeout')), 5000);
+    });
+
+    const queryPromise = supabase
       .from('user_profiles')
       .select('is_admin')
       .eq('user_id', user.id)
       .single();
 
-    if (error || !data) return false;
-    const profile = data as { is_admin: boolean };
-    return profile.is_admin === true;
+    const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
+    const isAdminResult = !error && data && (data as { is_admin: boolean }).is_admin === true;
+    
+    // 更新缓存
+    adminStatusCache = {
+      userId: user.id,
+      isAdmin: isAdminResult,
+      timestamp: now
+    };
+
+    return isAdminResult;
   } catch (error) {
     console.error('检查管理员状态错误:', error);
+    // 如果查询失败，返回缓存的值（如果有）
+    if (adminStatusCache.userId) {
+      return adminStatusCache.isAdmin;
+    }
     return false;
   }
+}
+
+// 清除管理员状态缓存（当用户状态改变时调用）
+export function clearAdminCache() {
+  adminStatusCache = { userId: null, isAdmin: false, timestamp: 0 };
 }
 
 // 获取用户的管理员状态（同步版本，从 session 中获取）

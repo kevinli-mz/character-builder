@@ -159,37 +159,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
     setRenameModal({ isOpen: true, assetId: id, currentName: asset.name });
   };
 
-  const confirmRenameAsset = (e?: React.FormEvent) => {
+  const confirmRenameAsset = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const { assetId } = renameModal;
     const newName = renameInputValue.trim();
 
     if (newName && newName !== "") {
-       const updatedAssets = data.assets.map(a => 
-         a.id === assetId ? { ...a, name: newName } : a
-       );
-       onUpdate({
-         ...data,
-         assets: updatedAssets
-       });
-       addToast("Asset renamed");
+      try {
+        // 先更新数据库
+        const { updateAsset } = await import('../services/api');
+        await updateAsset(assetId, { name: newName });
+        
+        // 然后更新本地状态
+        const updatedAssets = data.assets.map(a => 
+          a.id === assetId ? { ...a, name: newName } : a
+        );
+        onUpdate({
+          ...data,
+          assets: updatedAssets
+        });
+        addToast("Asset renamed");
+      } catch (error) {
+        console.error('重命名资产失败:', error);
+        addToast("重命名失败，请重试", "error");
+      }
     }
     setRenameModal(prev => ({ ...prev, isOpen: false }));
   };
 
-  const performSetDefaultAsset = (id: string) => {
+  const performSetDefaultAsset = async (id: string) => {
     const asset = data.assets.find(a => a.id === id);
     if (!asset) return;
     
-    const updatedCategories = data.categories.map(c => 
-      c.id === asset.categoryId ? { ...c, defaultAssetId: id } : c
-    );
+    try {
+      // 先更新数据库
+      const { updateCategory } = await import('../services/api');
+      await updateCategory(asset.categoryId, { default_asset_id: id });
+      
+      // 然后更新本地状态
+      const updatedCategories = data.categories.map(c => 
+        c.id === asset.categoryId ? { ...c, defaultAssetId: id } : c
+      );
 
-    onUpdate({
-      ...data,
-      categories: updatedCategories
-    });
-    addToast("Set as default");
+      onUpdate({
+        ...data,
+        categories: updatedCategories
+      });
+      addToast("Set as default");
+    } catch (error) {
+      console.error('设置默认资产失败:', error);
+      addToast("设置失败，请重试", "error");
+    }
   };
 
   const handleFileUpload = async (files: FileList | null) => {
@@ -254,39 +274,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
   };
 
   // Keep these as simple prompts for now as requested
-  const handleCreateCategory = () => {
-    setTimeout(() => {
+  const handleCreateCategory = async () => {
+    setTimeout(async () => {
       const name = prompt("Enter category name:");
       if (name) {
         const id = name.toLowerCase().replace(/\s+/g, '-');
         const maxZ = Math.max(0, ...data.categories.map(c => c.zIndex));
         const newCategory: Category = { id, name, zIndex: maxZ + 10 };
-        onUpdate({
-          ...data,
-          categories: [...data.categories, newCategory]
-        });
-        setUploadCategory(id);
-        addToast(`Category "${name}" created`);
-      }
-    }, 50);
-  };
-
-  const handleDeleteCategory = (id: string) => {
-    setTimeout(() => {
-      if (window.confirm("Delete category? This will delete all assets in it.")) {
-        onUpdate({
-          categories: data.categories.filter(c => c.id !== id),
-          assets: data.assets.filter(a => a.categoryId !== id)
-        });
-        if (uploadCategory === id) {
-          setUploadCategory(data.categories[0]?.id || '');
+        
+        try {
+          // 先保存到数据库
+          const { saveData } = await import('../services/api');
+          await saveData({
+            ...data,
+            categories: [...data.categories, newCategory]
+          });
+          
+          // 然后更新本地状态
+          onUpdate({
+            ...data,
+            categories: [...data.categories, newCategory]
+          });
+          setUploadCategory(id);
+          addToast(`Category "${name}" created`);
+        } catch (error) {
+          console.error('创建分类失败:', error);
+          addToast("创建失败，请重试", "error");
         }
-        addToast("Category deleted");
       }
     }, 50);
   };
 
-  const moveCategory = (index: number, direction: 'up' | 'down') => {
+  const handleDeleteCategory = async (id: string) => {
+    setTimeout(async () => {
+      if (window.confirm("Delete category? This will delete all assets in it.")) {
+        try {
+          // 使用专门的删除函数，确保从数据库删除
+          const { deleteCategory } = await import('../services/api');
+          await deleteCategory(id);
+          
+          // 更新本地状态
+          onUpdate({
+            categories: data.categories.filter(c => c.id !== id),
+            assets: data.assets.filter(a => a.categoryId !== id)
+          });
+          if (uploadCategory === id) {
+            setUploadCategory(data.categories[0]?.id || '');
+          }
+          addToast("Category deleted");
+        } catch (error) {
+          console.error('删除分类失败:', error);
+          addToast("删除失败，请重试", "error");
+        }
+      }
+    }, 50);
+  };
+
+  const moveCategory = async (index: number, direction: 'up' | 'down') => {
     const sorted = [...data.categories].sort((a, b) => a.zIndex - b.zIndex);
     const targetIndex = direction === 'up' ? index + 1 : index - 1;
     
@@ -297,10 +341,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
     sorted[index].zIndex = sorted[targetIndex].zIndex;
     sorted[targetIndex].zIndex = tempZ;
 
-    onUpdate({
-      ...data,
-      categories: sorted
-    });
+    try {
+      // 更新数据库中的 z_index
+      const { updateCategory } = await import('../services/api');
+      await updateCategory(sorted[index].id, { z_index: sorted[index].zIndex });
+      await updateCategory(sorted[targetIndex].id, { z_index: sorted[targetIndex].zIndex });
+      
+      // 更新本地状态
+      onUpdate({
+        ...data,
+        categories: sorted
+      });
+    } catch (error) {
+      console.error('移动分类失败:', error);
+      addToast("移动失败，请重试", "error");
+    }
   };
 
   // --- Drag and Drop for Assets ---

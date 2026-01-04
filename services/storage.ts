@@ -86,17 +86,25 @@ export const getStoredData = async (): Promise<AppData> => {
       // 用户已登录，从 Supabase 获取全局共享数据
       const data = await fetchData();
       
-      // 如果数据库完全为空（首次使用），且当前用户是管理员，初始化默认数据
+      // 重要：只在数据库完全为空且用户是管理员时初始化
+      // 添加额外的检查，确保不会因为网络问题误判为空
       if (data.categories.length === 0 && data.assets.length === 0) {
         const { isAdmin } = await import('./admin');
         const adminStatus = await isAdmin();
+        
         if (adminStatus) {
-          // 只有管理员在数据库完全为空时才初始化
-          // 这样可以确保后续加载时总是使用管理员设置的数据
-          console.log('数据库为空，管理员初始化默认数据');
-          await saveData(DEFAULT_DATA);
-          // 初始化后重新获取，确保返回保存的数据
-          return await fetchData();
+          // 再次确认数据库确实为空（防止网络超时导致的误判）
+          const doubleCheck = await fetchData();
+          if (doubleCheck.categories.length === 0 && doubleCheck.assets.length === 0) {
+            // 只有连续两次确认为空，且用户是管理员，才初始化
+            console.log('数据库确认为空，管理员初始化默认数据');
+            await saveData(DEFAULT_DATA);
+            // 初始化后重新获取，确保返回保存的数据
+            return await fetchData();
+          } else {
+            // 如果第二次检查有数据，返回第二次检查的结果
+            return doubleCheck;
+          }
         }
       }
       
@@ -194,13 +202,20 @@ export const getStoredDataSync = (): AppData => {
 };
 
 // 保存数据到 Supabase（异步）
+// 注意：此函数会保存完整的数据集，但不会删除数据库中不在数据集中的项目
+// 如果需要删除，请使用专门的删除函数
 export const saveStoredData = async (data: AppData): Promise<void> => {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (user) {
       // 用户已登录，保存到 Supabase
+      // 注意：saveData 只进行 upsert，不会删除任何数据
       await saveData(data);
+      console.log('数据已保存到 Supabase:', {
+        categories: data.categories.length,
+        assets: data.assets.length
+      });
     }
     
     // 同时保存到本地存储作为备份

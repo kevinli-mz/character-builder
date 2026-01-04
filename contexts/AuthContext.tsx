@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
-import { getUserAdminStatus } from '../services/admin';
+import { getUserAdminStatus, clearAdminCache } from '../services/admin';
 
 interface AuthContextType {
   user: User | null;
@@ -162,6 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    clearAdminCache(); // 清除管理员状态缓存
     setUser(null);
     setSession(null);
     setIsAdmin(false);
