@@ -106,7 +106,7 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick }
       link.click();
     } catch (error) {
       console.error("Download failed", error);
-      alert("Could not generate image. Please try again.");
+      alert("无法生成图片，请重试。");
     } finally {
       setIsDownloading(false);
     }
@@ -121,7 +121,7 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick }
       <div className="md:hidden p-4 bg-white/80 backdrop-blur border-b border-stone-200 flex justify-between items-center z-20 sticky top-0">
         <h1 className="font-bold text-lg text-stone-800 flex items-center gap-2">
            <span className="bg-emerald-400 text-white px-2 py-0.5 rounded-lg rotate-3 text-sm">CP</span>
-           Builder
+           构建器
         </h1>
         {onAdminClick && (
           <Button size="sm" variant="ghost" onClick={onAdminClick}><Lock className="w-4 h-4"/></Button>
@@ -163,7 +163,7 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick }
                }`}
             >
                <div className="w-8 h-8 rounded-full border-2 border-stone-300 mb-1"></div>
-               <span className="text-xs text-stone-400 font-bold">None</span>
+               <span className="text-xs text-stone-400 font-bold">无</span>
             </button>
 
             {assetsForActiveCategory.map(asset => (
@@ -186,17 +186,17 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick }
           {assetsForActiveCategory.length === 0 && (
              <div className="h-full flex flex-col items-center justify-center text-stone-400 text-sm">
                <div className="w-12 h-12 bg-stone-100 rounded-full mb-3"></div>
-               No assets in this category.
+               此分类中暂无资产。
              </div>
           )}
         </div>
 
         {/* Action Bar */}
         <div className="p-6 border-t border-stone-100 bg-white flex gap-3 shadow-[0_-5px_15px_rgba(0,0,0,0.02)]">
-          <Button variant="secondary" className="flex-1 rounded-2xl" onClick={handleRandomize} title="Randomize">
-            <Shuffle className="w-5 h-5 mr-2 text-emerald-500" /> Random
+          <Button variant="secondary" className="flex-1 rounded-2xl" onClick={handleRandomize} title="随机生成">
+            <Shuffle className="w-5 h-5 mr-2 text-emerald-500" /> 随机
           </Button>
-          <Button variant="ghost" className="rounded-2xl bg-stone-50" onClick={handleReset} title="Reset to Default">
+          <Button variant="ghost" className="rounded-2xl bg-stone-50" onClick={handleReset} title="重置为默认">
             <RotateCcw className="w-5 h-5 text-stone-400" />
           </Button>
         </div>
@@ -209,7 +209,7 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick }
         {onAdminClick && (
           <div className="hidden md:block absolute top-8 right-8">
             <Button variant="ghost" size="sm" className="text-stone-400 hover:text-emerald-500" onClick={onAdminClick}>
-              Admin Access
+              管理面板
             </Button>
           </div>
         )}
@@ -228,12 +228,12 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick }
         {/* CTA */}
         <div className="mt-10 flex gap-4 z-10">
           <Button size="lg" onClick={handleDownload} isLoading={isDownloading} className="px-10 py-4 text-lg shadow-xl shadow-emerald-200 hover:shadow-2xl hover:shadow-emerald-300 hover:-translate-y-1">
-            <Download className="w-6 h-6 mr-3" /> Download Character
+            <Download className="w-6 h-6 mr-3" /> 下载角色
           </Button>
         </div>
 
         <div className="mt-6 text-xs font-medium text-stone-400 text-center max-w-xs bg-white/80 px-4 py-2 rounded-full backdrop-blur-sm">
-           ✨ Mix and match to create your unique character!
+           ✨ 自由搭配，创造属于你的独特角色！
         </div>
       </div>
 

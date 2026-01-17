@@ -208,7 +208,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
           ...data,
           assets: updatedAssets
         });
-        addToast("Asset renamed");
+        addToast("资产已重命名");
       } catch (error) {
         console.error('重命名资产失败:', error);
         addToast("重命名失败，请重试", "error");
@@ -235,7 +235,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
         ...data,
         categories: updatedCategories
       });
-      addToast("Set as default");
+      addToast("已设为默认");
     } catch (error) {
       console.error('设置默认资产失败:', error);
       addToast("设置失败，请重试", "error");
@@ -306,7 +306,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
   // Keep these as simple prompts for now as requested
   const handleCreateCategory = async () => {
     setTimeout(async () => {
-      const name = prompt("Enter category name:");
+      const name = prompt("请输入分类名称：");
       if (name) {
         const id = name.toLowerCase().replace(/\s+/g, '-');
         const maxZ = Math.max(0, ...data.categories.map(c => c.zIndex));
@@ -326,7 +326,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
             categories: [...data.categories, newCategory]
           });
           setUploadCategory(id);
-          addToast(`Category "${name}" created`);
+          addToast(`分类 "${name}" 已创建`);
         } catch (error) {
           console.error('创建分类失败:', error);
           addToast("创建失败，请重试", "error");
@@ -337,7 +337,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
 
   const handleDeleteCategory = async (id: string) => {
     setTimeout(async () => {
-      if (window.confirm("Delete category? This will delete all assets in it.")) {
+      if (window.confirm("删除分类？这将删除该分类中的所有资产。")) {
         try {
           // 使用专门的删除函数，确保从数据库删除
           const { deleteCategory } = await import('../services/api');
@@ -351,7 +351,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
           if (uploadCategory === id) {
             setUploadCategory(data.categories[0]?.id || '');
           }
-          addToast("Category deleted");
+          addToast("分类已删除");
         } catch (error) {
           console.error('删除分类失败:', error);
           addToast("删除失败，请重试", "error");
@@ -443,15 +443,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
       <Modal
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal(prev => ({ ...prev, isOpen: false }))}
-        title="Delete Asset"
+        title="删除资产"
         variant="danger"
         footer={
           <>
             <Button variant="secondary" onClick={() => setDeleteModal(prev => ({ ...prev, isOpen: false }))}>
-              Cancel
+              取消
             </Button>
             <Button variant="danger" onClick={confirmDeleteAsset}>
-              Delete Asset
+              删除资产
             </Button>
           </>
         }
@@ -459,7 +459,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
         <div className="flex flex-col gap-3">
           <div className="bg-rose-50 text-rose-600 p-4 rounded-xl flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-            <p className="text-sm font-medium">Are you sure you want to delete this asset? This action cannot be undone.</p>
+            <p className="text-sm font-medium">确定要删除此资产吗？此操作无法撤销。</p>
           </div>
           <p className="font-bold text-lg text-stone-800 ml-1">
             "{deleteModal.assetName}"
@@ -471,33 +471,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
       <Modal
         isOpen={renameModal.isOpen}
         onClose={() => setRenameModal(prev => ({ ...prev, isOpen: false }))}
-        title="Rename Asset"
+        title="重命名资产"
         footer={
           <>
              <Button variant="secondary" onClick={() => setRenameModal(prev => ({ ...prev, isOpen: false }))}>
-              Cancel
+              取消
             </Button>
             <Button variant="primary" onClick={() => confirmRenameAsset()}>
-              Save Changes
+              保存更改
             </Button>
           </>
         }
       >
         <form onSubmit={confirmRenameAsset} className="flex flex-col gap-4">
           <div>
-            <label className="block text-sm font-bold text-stone-500 mb-1.5">Asset Name</label>
+            <label className="block text-sm font-bold text-stone-500 mb-1.5">资产名称</label>
             <input 
               ref={renameInputRef}
               type="text" 
               value={renameInputValue}
               onChange={(e) => setRenameInputValue(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-emerald-400 focus:border-transparent outline-none transition-all text-stone-800 font-medium"
-              placeholder="Enter asset name..."
+              placeholder="输入资产名称..."
               autoFocus
             />
           </div>
           <p className="text-xs text-stone-400">
-             Tip: Keep names descriptive for easier searching in the future.
+             提示：使用描述性名称，便于日后搜索。
           </p>
         </form>
       </Modal>
@@ -514,19 +514,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
             className="w-full text-left px-4 py-3 hover:bg-stone-50 text-sm font-medium text-stone-700 flex items-center gap-2"
             onClick={() => { setContextMenu(null); initiateRenameAsset(contextMenu.assetId); }}
           >
-            <Pencil className="w-4 h-4 text-emerald-500" /> Rename
+            <Pencil className="w-4 h-4 text-emerald-500" /> 重命名
           </button>
            <button 
             className="w-full text-left px-4 py-3 hover:bg-stone-50 text-sm font-medium text-stone-700 flex items-center gap-2"
             onClick={() => { setContextMenu(null); performSetDefaultAsset(contextMenu.assetId); }}
           >
-            <Star className="w-4 h-4 text-amber-400" /> Set Default
+            <Star className="w-4 h-4 text-amber-400" /> 设为默认
           </button>
           <button 
             className="w-full text-left px-4 py-3 hover:bg-rose-50 text-sm font-medium text-rose-600 flex items-center gap-2 border-t border-stone-100"
             onClick={() => { setContextMenu(null); initiateDeleteAsset(contextMenu.assetId); }}
           >
-            <Trash2 className="w-4 h-4" /> Delete
+            <Trash2 className="w-4 h-4" /> 删除
           </button>
         </div>
       )}
@@ -546,9 +546,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
         </div>
         <div className="flex gap-2">
            <Button variant="secondary" onClick={() => window.location.hash = ''}>
-             View Public Site
+             查看公开站点
            </Button>
-           <Button variant="ghost" onClick={async () => { await signOut(); onLogout(); }} title="Logout">
+           <Button variant="ghost" onClick={async () => { await signOut(); onLogout(); }} title="登出">
             <LogOut className="w-5 h-5" />
           </Button>
         </div>
@@ -562,21 +562,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
             className="justify-start w-full" 
             onClick={() => setActiveTab('upload')}
           >
-            <Upload className="w-4 h-4 mr-3" /> Upload Assets
+            <Upload className="w-4 h-4 mr-3" /> 上传资产
           </Button>
           <Button 
             variant={activeTab === 'assets' ? 'primary' : 'ghost'} 
             className="justify-start w-full" 
             onClick={() => setActiveTab('assets')}
           >
-            <ImageIcon className="w-4 h-4 mr-3" /> Asset Library
+            <ImageIcon className="w-4 h-4 mr-3" /> 资产库
           </Button>
           <Button 
             variant={activeTab === 'categories' ? 'primary' : 'ghost'} 
             className="justify-start w-full" 
             onClick={() => setActiveTab('categories')}
           >
-            <FolderPlus className="w-4 h-4 mr-3" /> Layers
+            <FolderPlus className="w-4 h-4 mr-3" /> 图层
           </Button>
           <Button 
             variant={activeTab === 'users' ? 'primary' : 'ghost'} 
@@ -604,10 +604,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
           {/* UPLOAD TAB */}
           {activeTab === 'upload' && (
             <div className="max-w-2xl mx-auto bg-white p-8 rounded-3xl shadow-sm border border-stone-100">
-              <h2 className="text-2xl font-bold mb-6 text-stone-800">Upload New Assets</h2>
+              <h2 className="text-2xl font-bold mb-6 text-stone-800">上传新资产</h2>
               
               <div className="mb-6">
-                <label className="block text-sm font-bold text-stone-600 mb-2">Assign Category</label>
+                <label className="block text-sm font-bold text-stone-600 mb-2">选择分类</label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <select 
@@ -615,7 +615,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                       onChange={(e) => setUploadCategory(e.target.value)}
                       className="block w-full appearance-none rounded-xl border-stone-200 bg-stone-50 text-stone-700 py-3 px-4 pr-8 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
                     >
-                      <option value="" disabled>Select a category...</option>
+                      <option value="" disabled>选择分类...</option>
                       {data.categories.map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
@@ -624,7 +624,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                       <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
                     </div>
                   </div>
-                  <Button variant="secondary" onClick={handleCreateCategory}>New</Button>
+                  <Button variant="secondary" onClick={handleCreateCategory}>新建</Button>
                 </div>
               </div>
 
@@ -644,7 +644,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      <p className="text-stone-500">Processing files...</p>
+                      <p className="text-stone-500">正在处理文件...</p>
                   </div>
                 ) : (
                   <>
@@ -653,12 +653,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                     </div>
                     <h3 className="mt-2 text-lg font-bold text-stone-800">
                       <label htmlFor="file-upload" className="relative cursor-pointer text-emerald-500 hover:text-emerald-600 hover:underline">
-                        <span>Click to upload</span>
+                        <span>点击上传</span>
                         <input id="file-upload" name="file-upload" type="file" className="sr-only" multiple accept="image/png,image/svg+xml" ref={fileInputRef} onChange={(e) => handleFileUpload(e.target.files)} />
                       </label>
-                      <span className="pl-1 text-stone-500">or drag and drop</span>
+                      <span className="pl-1 text-stone-500">或拖拽文件</span>
                     </h3>
-                    <p className="mt-2 text-sm text-stone-400">Upload multiple PNG or SVG files • 800x800px recommended</p>
+                    <p className="mt-2 text-sm text-stone-400">可上传多个 PNG 或 SVG 文件 • 建议尺寸 800x800px</p>
                   </>
                 )}
               </div>
@@ -670,10 +670,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
              <div>
                <div className="flex justify-between items-center mb-8">
                 <div>
-                  <h2 className="text-3xl font-bold text-stone-800">Asset Library</h2>
-                  <p className="text-stone-500 mt-1">Right-click to Rename, Set Default or Delete. Drag to reorder.</p>
+                  <h2 className="text-3xl font-bold text-stone-800">资产库</h2>
+                  <p className="text-stone-500 mt-1">右键点击可重命名、设为默认或删除。拖拽可重新排序。</p>
                 </div>
-                <span className="bg-stone-200 text-stone-600 px-3 py-1 rounded-full text-sm font-bold">{data.assets.length} items</span>
+                <span className="bg-stone-200 text-stone-600 px-3 py-1 rounded-full text-sm font-bold">{data.assets.length} 项</span>
                </div>
                
                {data.categories.map(cat => {
@@ -684,7 +684,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                    <div key={cat.id} className="mb-10 bg-white p-6 rounded-3xl shadow-sm border border-stone-100">
                      <h3 className="text-xl font-bold mb-4 pb-2 border-b border-stone-100 text-stone-700 capitalize flex items-center gap-2">
                        {cat.name}
-                       {cat.defaultAssetId && <span className="text-amber-500 text-xs flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full"><Star className="w-3 h-3 fill-current"/> has default</span>}
+                       {cat.defaultAssetId && <span className="text-amber-500 text-xs flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full"><Star className="w-3 h-3 fill-current"/> 已设默认</span>}
                        <span className="text-xs font-normal text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full ml-auto">{catAssets.length}</span>
                      </h3>
                      
@@ -727,7 +727,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                                   onClick={(e) => { e.stopPropagation(); e.preventDefault(); initiateDeleteAsset(asset.id); }}
                                   onMouseDown={(e) => e.stopPropagation()} 
                                   className="bg-white shadow-sm text-rose-500 p-1.5 rounded-full hover:bg-rose-50 hover:scale-110"
-                                  title="Delete Asset"
+                                  title="删除资产"
                                >
                                  <Trash2 className="w-3.5 h-3.5" />
                                </button>
@@ -735,7 +735,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                                   onClick={(e) => { e.stopPropagation(); e.preventDefault(); initiateRenameAsset(asset.id); }}
                                   onMouseDown={(e) => e.stopPropagation()} 
                                   className="bg-white shadow-sm text-emerald-500 p-1.5 rounded-full hover:bg-emerald-50 hover:scale-110"
-                                  title="Rename Asset"
+                                  title="重命名资产"
                                >
                                  <Pencil className="w-3.5 h-3.5" />
                                </button>
@@ -749,8 +749,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                })}
                {data.assets.length === 0 && (
                  <div className="text-center py-20 text-stone-400">
-                   <p>No assets uploaded yet.</p>
-                   <Button variant="outline" className="mt-4" onClick={() => setActiveTab('upload')}>Go to Upload</Button>
+                   <p>暂无上传的资产。</p>
+                   <Button variant="outline" className="mt-4" onClick={() => setActiveTab('upload')}>前往上传</Button>
                  </div>
                )}
              </div>
@@ -760,11 +760,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
           {activeTab === 'categories' && (
             <div className="max-w-3xl mx-auto">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-stone-800">Layer Order</h2>
-                <Button onClick={handleCreateCategory}><FolderPlus className="w-4 h-4 mr-2"/> Add Category</Button>
+                <h2 className="text-2xl font-bold text-stone-800">图层顺序</h2>
+                <Button onClick={handleCreateCategory}><FolderPlus className="w-4 h-4 mr-2"/> 添加分类</Button>
               </div>
               <p className="text-sm text-stone-500 mb-6 bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-100">
-                <strong>Tip:</strong> Items higher in this list will appear <em>on top</em> of items lower in the list on the character canvas.
+                <strong>提示：</strong>列表中位置越高的项目，在角色画布上会显示在<em>越上层</em>。
               </p>
 
               <div className="flex flex-col gap-3">
@@ -777,10 +777,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                        <div>
                          <h4 className="font-bold text-stone-800 flex items-center gap-2">
                             {cat.name}
-                            {cat.defaultAssetId && <span className="text-[10px] uppercase bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-bold tracking-wider">Default Set</span>}
+                            {cat.defaultAssetId && <span className="text-[10px] uppercase bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-bold tracking-wider">已设默认</span>}
                          </h4>
                          <span className="text-xs text-stone-400">
-                           ID: {cat.id} • {data.assets.filter(a => a.categoryId === cat.id).length} assets
+                           ID: {cat.id} • {data.assets.filter(a => a.categoryId === cat.id).length} 个资产
                          </span>
                        </div>
                     </div>
