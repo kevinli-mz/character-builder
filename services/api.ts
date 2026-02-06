@@ -1,55 +1,39 @@
-import { AppData, Asset, Category, CharacterState } from '../types';
+import { AppData, Asset, Category, CharacterState, Card, Preset, MaskShape } from '../types';
 import { supabase } from './supabase';
+import { FETCH_TIMEOUT_MS } from '../constants/appConfig';
 
-// 注意：getUserId 函数已移除，直接使用 await supabase.auth.getUser() 获取用户
-
-// 从 Supabase 获取所有数据（分类和资产）- 全局共享，所有人都可以查看
+// 从 Supabase 获取所有数据（分类和资产）- 全局共享，所有人可查看；单次超时控制
 export async function fetchData(): Promise<AppData> {
   try {
-    // 添加超时控制
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Fetch timeout')), 8000);
+      setTimeout(() => reject(new Error('Fetch timeout')), FETCH_TIMEOUT_MS);
     });
 
-    // 获取分类（全局，所有人可查看）
     const categoriesPromise = supabase
       .from('categories')
       .select('*')
       .order('z_index', { ascending: true });
+    const assetsPromise = supabase.from('assets').select('*');
 
-    const { data: categoriesData, error: categoriesError } = await Promise.race([
-      categoriesPromise,
+    const [categoriesResult, assetsResult] = await Promise.race([
+      Promise.all([categoriesPromise, assetsPromise]),
       timeoutPromise
-    ]) as any;
+    ]) as any[];
 
-    if (categoriesError) {
-      console.warn('获取分类失败:', categoriesError);
-      // 不抛出错误，返回空数组
-    }
+    const categoriesData = categoriesResult?.data;
+    const categoriesError = categoriesResult?.error;
+    const assetsData = assetsResult?.data;
+    const assetsError = assetsResult?.error;
 
-    // 获取资产（全局，所有人可查看）
-    const assetsPromise = supabase
-      .from('assets')
-      .select('*');
+    if (categoriesError) console.warn('获取分类失败:', categoriesError);
+    if (assetsError) console.warn('获取资产失败:', assetsError);
 
-    const { data: assetsData, error: assetsError } = await Promise.race([
-      assetsPromise,
-      timeoutPromise
-    ]) as any;
-
-    if (assetsError) {
-      console.warn('获取资产失败:', assetsError);
-      // 不抛出错误，继续使用空数组
-    }
-
-    // 转换为应用格式（即使数据为空也要处理）
     const categories: Category[] = (categoriesData || []).map((cat: any) => ({
       id: cat.id,
       name: cat.name,
       zIndex: cat.z_index,
       defaultAssetId: cat.default_asset_id || undefined
     }));
-
     const assets: Asset[] = (assetsData || []).map((asset: any) => ({
       id: asset.id,
       name: asset.name,
@@ -60,7 +44,6 @@ export async function fetchData(): Promise<AppData> {
     return { categories, assets };
   } catch (error) {
     console.error('获取数据错误:', error);
-    // 确保总是返回有效的数据结构
     return { categories: [], assets: [] };
   }
 }
@@ -102,27 +85,27 @@ export async function saveData(data: AppData): Promise<boolean> {
       }
     }
 
-    // 保存资产（只 upsert，不删除）
-    for (const asset of data.assets) {
-      // 查找对应的数据库记录以获取 storage_path
-      const { data: existingAsset } = await supabase
-        .from('assets')
-        .select('storage_path')
-        .eq('id', asset.id)
-        .single();
+    // 批量查询已有资产的 storage_path，避免 N+1
+    const assetIds = data.assets.map((a) => a.id);
+    const { data: existingAssets } = assetIds.length
+      ? await supabase.from('assets').select('id, storage_path').in('id', assetIds)
+      : { data: [] };
+    const pathById = new Map(
+      (existingAssets || []).map((r: any) => [r.id, r.storage_path])
+    );
 
+    for (const asset of data.assets) {
+      const storage_path = pathById.get(asset.id) || `assets/${asset.id}`;
       const { error } = await supabase
         .from('assets')
         .upsert({
           id: asset.id,
           category_id: asset.categoryId,
           name: asset.name,
-          storage_path: (existingAsset as any)?.storage_path || `assets/${asset.id}`,
+          storage_path,
           public_url: asset.src,
           created_by: user.id
-        } as any, {
-          onConflict: 'id'
-        });
+        } as any, { onConflict: 'id' });
 
       if (error) {
         console.error('保存资产错误:', asset.id, error);
@@ -574,6 +557,281 @@ export async function deleteStockAssets(): Promise<{ deleted: string[]; errors: 
     return { deleted, errors };
   } catch (error) {
     console.error('删除占位符资产错误:', error);
+    throw error;
+  }
+}
+
+// ========== Card Management Functions ==========
+
+// Fetch all cards (everyone can view)
+export async function fetchCards(): Promise<Card[]> {
+  try {
+    const { data, error } = await supabase
+      .from('cards')
+      .select('*')
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    
+    return (data || []).map((card: any) => ({
+      id: card.id,
+      name: card.name,
+      src: card.public_url,
+      isDefault: card.is_default || false
+    }));
+  } catch (error) {
+    console.error('获取卡牌错误:', error);
+    return [];
+  }
+}
+
+// Upload card (admin only)
+export async function uploadCard(file: File, name: string, isDefault: boolean = false): Promise<Card> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('用户未登录');
+    }
+
+    const { isAdmin } = await import('./admin');
+    const adminStatus = await isAdmin();
+    if (!adminStatus) {
+      throw new Error('只有管理员可以上传卡牌');
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      throw new Error('不是有效的图片文件');
+    }
+
+    // Storage path: use unique string (cards.id is UUID, generated by DB)
+    const storagePath = `cards/${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('character-assets')
+      .upload(storagePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('上传卡牌文件错误:', uploadError);
+      throw new Error(`上传失败: ${uploadError.message}`);
+    }
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('character-assets')
+      .getPublicUrl(storagePath);
+
+    // If this is set as default, unset other defaults
+    if (isDefault) {
+      await supabase
+        .from('cards')
+        .update({ is_default: false } as never)
+        .eq('is_default', true);
+    }
+
+    // Save to database (id is UUID, generated by database)
+    const { data: cardData, error: dbError } = await supabase
+      .from('cards')
+      .insert({
+        name,
+        storage_path: storagePath,
+        public_url: publicUrl,
+        is_default: isDefault,
+        created_by: user.id
+      } as any)
+      .select()
+      .single();
+
+    if (dbError) {
+      // Try to delete uploaded file
+      await supabase.storage
+        .from('character-assets')
+        .remove([storagePath]);
+      throw new Error(`保存到数据库失败: ${dbError.message}`);
+    }
+
+    return {
+      id: (cardData as any).id,
+      name: (cardData as any).name,
+      src: (cardData as any).public_url,
+      isDefault: (cardData as any).is_default || false
+    };
+  } catch (error) {
+    console.error('上传卡牌错误:', error);
+    throw error;
+  }
+}
+
+// Delete card (admin only)
+export async function deleteCard(cardId: string): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('用户未登录');
+    }
+
+    const { isAdmin } = await import('./admin');
+    const adminStatus = await isAdmin();
+    if (!adminStatus) {
+      throw new Error('只有管理员可以删除卡牌');
+    }
+
+    // Get card info
+    const { data: card, error: fetchError } = await supabase
+      .from('cards')
+      .select('storage_path')
+      .eq('id', cardId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Delete from storage
+    if (card && (card as any).storage_path) {
+      await supabase.storage
+        .from('character-assets')
+        .remove([(card as any).storage_path]);
+    }
+
+    // Delete from database
+    const { error: deleteError } = await supabase
+      .from('cards')
+      .delete()
+      .eq('id', cardId);
+
+    if (deleteError) throw deleteError;
+  } catch (error) {
+    console.error('删除卡牌错误:', error);
+    throw error;
+  }
+}
+
+// ========== Preset Management Functions ==========
+
+// Save preset
+export async function savePreset(
+  name: string,
+  characterState: CharacterState,
+  cardId?: string,
+  maskShape: MaskShape = 'square',
+  cardTextTitle?: string,
+  cardTextBody?: string
+): Promise<string> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('用户未登录');
+    }
+
+    const { data, error } = await supabase
+      .from('presets')
+      .insert({
+        user_id: user.id,
+        name,
+        character_state: characterState,
+        card_id: cardId || null,
+        mask_shape: maskShape,
+        card_text_title: cardTextTitle || null,
+        card_text_body: cardTextBody || null
+      } as any)
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return (data as any).id;
+  } catch (error) {
+    console.error('保存预设错误:', error);
+    throw error;
+  }
+}
+
+// Get user presets
+export async function getUserPresets(): Promise<Preset[]> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('presets')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    
+    return (data || []).map((preset: any) => ({
+      id: preset.id,
+      name: preset.name,
+      characterState: preset.character_state as CharacterState,
+      cardId: preset.card_id || undefined,
+      maskShape: (preset.mask_shape || 'square') as MaskShape,
+      cardTextTitle: preset.card_text_title || undefined,
+      cardTextBody: preset.card_text_body || undefined,
+      createdAt: preset.created_at
+    }));
+  } catch (error) {
+    console.error('获取预设列表错误:', error);
+    return [];
+  }
+}
+
+// Delete preset
+export async function deletePreset(presetId: string): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('用户未登录');
+    }
+
+    const { error } = await supabase
+      .from('presets')
+      .delete()
+      .eq('id', presetId)
+      .eq('user_id', user.id); // Ensure user owns the preset
+
+    if (error) throw error;
+  } catch (error) {
+    console.error('删除预设错误:', error);
+    throw error;
+  }
+}
+
+// Load preset
+export async function loadPreset(presetId: string): Promise<Preset> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('用户未登录');
+    }
+
+    const { data, error } = await supabase
+      .from('presets')
+      .select('*')
+      .eq('id', presetId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (error) throw error;
+    
+    const preset = data as any;
+    return {
+      id: preset.id,
+      name: preset.name,
+      characterState: preset.character_state as CharacterState,
+      cardId: preset.card_id || undefined,
+      maskShape: (preset.mask_shape || 'square') as MaskShape,
+      cardTextTitle: preset.card_text_title || undefined,
+      cardTextBody: preset.card_text_body || undefined,
+      createdAt: preset.created_at
+    };
+  } catch (error) {
+    console.error('加载预设错误:', error);
     throw error;
   }
 }

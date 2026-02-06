@@ -1,27 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { AppData, View } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { AppData, View, Preset } from './types';
 import { getStoredData, saveStoredData } from './services/storage';
 import { Configurator } from './components/Configurator';
 import { AdminDashboard } from './components/AdminDashboard';
+import { UserProfile } from './components/UserProfile';
 import { Auth } from './components/Auth';
 import { useAuth } from './contexts/AuthContext';
+import { DATA_LOAD_TIMEOUT_MS, AUTH_LOADING_TIMEOUT_MS } from './constants/appConfig';
 
 const App: React.FC = () => {
   const { user, isAdmin, loading: authLoading } = useAuth();
   const [view, setView] = useState<View>(View.CONFIGURATOR);
   const [data, setData] = useState<AppData>({ categories: [], assets: [] });
   const [loading, setLoading] = useState(true);
-
-  // Debug: Check environment variables in production
-  useEffect(() => {
-    if (import.meta.env.MODE === 'production') {
-      console.log('Environment check:', {
-        hasSupabaseUrl: !!import.meta.env.VITE_SUPABASE_URL,
-        hasSupabaseKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
-        mode: import.meta.env.MODE
-      });
-    }
-  }, []);
 
   // Load data on mount - only reload when user actually changes (not on every auth state change)
   useEffect(() => {
@@ -47,7 +38,7 @@ const App: React.FC = () => {
             }
           }
         }
-      }, 8000); // 8秒超时
+      }, DATA_LOAD_TIMEOUT_MS);
 
       try {
         const stored = await getStoredData();
@@ -81,13 +72,12 @@ const App: React.FC = () => {
     if (!authLoading) {
       loadData();
     } else {
-      // 如果认证还在加载，设置一个超时
       const authTimeout = setTimeout(() => {
         if (mounted && authLoading) {
           console.warn('认证加载超时，继续加载数据');
           loadData();
         }
-      }, 5000);
+      }, AUTH_LOADING_TIMEOUT_MS);
       
       return () => {
         clearTimeout(authTimeout);
@@ -100,6 +90,8 @@ const App: React.FC = () => {
     const checkHash = () => {
         if (window.location.hash === '#admin') {
             setView(View.ADMIN);
+        } else if (window.location.hash === '#profile') {
+            setView(View.USER_PROFILE);
         } else {
             setView(View.CONFIGURATOR);
         }
@@ -112,17 +104,20 @@ const App: React.FC = () => {
       clearTimeout(timeoutId);
       mounted = false;
     };
-  }, [authLoading, user?.id]); // 只依赖 user.id，而不是整个 user 对象
+  }, [authLoading, user?.id]);
 
-  const handleUpdateData = async (newData: AppData) => {
+  const handleUpdateData = useCallback(async (newData: AppData) => {
     setData(newData);
     try {
       await saveStoredData(newData);
     } catch (error) {
       console.error('保存数据失败:', error);
-      // 即使保存失败，也更新本地状态
     }
-  };
+  }, []);
+
+  const goAdmin = useCallback(() => { window.location.hash = 'admin'; }, []);
+  const goProfile = useCallback(() => { window.location.hash = 'profile'; }, []);
+  const goConfigurator = useCallback(() => { window.location.hash = ''; }, []);
 
   // Show loading state
   if (authLoading || loading) {
@@ -146,16 +141,11 @@ const App: React.FC = () => {
   // Admin View (only for admins)
   if (view === View.ADMIN) {
     if (!isAdmin) {
-      // Redirect non-admins back to configurator
-      window.location.hash = '';
       return (
         <div className="h-screen flex items-center justify-center bg-[#fdfbf7]">
           <div className="text-center">
             <p className="text-stone-600 mb-4">您没有管理员权限</p>
-            <button 
-              onClick={() => window.location.hash = ''}
-              className="text-emerald-600 hover:underline"
-            >
+            <button onClick={goConfigurator} className="text-emerald-600 hover:underline">
               返回配置器
             </button>
           </div>
@@ -165,13 +155,24 @@ const App: React.FC = () => {
     return <AdminDashboard data={data} onUpdate={handleUpdateData} onLogout={() => {}} />;
   }
 
-  // Public View (all authenticated users can use, but only admins see admin button)
+  if (view === View.USER_PROFILE) {
+    return (
+      <UserProfile
+        onClose={goConfigurator}
+        onLoadPreset={(preset: Preset) => {
+          goConfigurator();
+          sessionStorage.removeItem('configuratorState');
+          sessionStorage.setItem('loadPreset', JSON.stringify(preset));
+        }}
+      />
+    );
+  }
+
   return (
-    <Configurator 
-      data={data} 
-      onAdminClick={isAdmin ? () => {
-          window.location.hash = 'admin';
-      } : undefined} 
+    <Configurator
+      data={data}
+      onAdminClick={isAdmin ? goAdmin : undefined}
+      onProfileClick={goProfile}
     />
   );
 };

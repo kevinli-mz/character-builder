@@ -1,13 +1,12 @@
 import { supabase } from './supabase';
+import { ADMIN_CACHE_DURATION_MS, ADMIN_CHECK_TIMEOUT_MS } from '../constants/appConfig';
 
-// 缓存管理员状态，避免频繁查询
+// 缓存管理员状态，避免频繁查询；isAdmin() 与 getUserAdminStatus() 共用
 let adminStatusCache: { userId: string | null; isAdmin: boolean; timestamp: number } = {
   userId: null,
   isAdmin: false,
   timestamp: 0
 };
-
-const CACHE_DURATION = 60000; // 缓存 60 秒
 
 // 检查当前用户是否是管理员（带缓存）
 export async function isAdmin(): Promise<boolean> {
@@ -18,18 +17,16 @@ export async function isAdmin(): Promise<boolean> {
       return false;
     }
 
-    // 检查缓存
     const now = Date.now();
     if (
       adminStatusCache.userId === user.id &&
-      now - adminStatusCache.timestamp < CACHE_DURATION
+      now - adminStatusCache.timestamp < ADMIN_CACHE_DURATION_MS
     ) {
       return adminStatusCache.isAdmin;
     }
 
-    // 添加超时控制
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Admin check timeout')), 5000);
+      setTimeout(() => reject(new Error('Admin check timeout')), ADMIN_CHECK_TIMEOUT_MS);
     });
 
     const queryPromise = supabase
@@ -65,12 +62,11 @@ export function clearAdminCache() {
   adminStatusCache = { userId: null, isAdmin: false, timestamp: 0 };
 }
 
-// 获取用户的管理员状态（同步版本，从 session 中获取）
+// 获取用户的管理员状态；若为当前会话用户则写入共享缓存，供 isAdmin() 使用
 export async function getUserAdminStatus(userId: string): Promise<boolean> {
   try {
-    // 添加超时控制，防止无限等待
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Timeout')), 5000);
+      setTimeout(() => reject(new Error('Timeout')), ADMIN_CHECK_TIMEOUT_MS);
     });
 
     const queryPromise = supabase
@@ -80,12 +76,21 @@ export async function getUserAdminStatus(userId: string): Promise<boolean> {
       .single();
 
     const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+    const isAdminResult = !error && data && (data as any).is_admin === true;
 
-    if (error || !data) return false;
-    return (data as any).is_admin === true;
+    // 若为当前会话用户，更新共享缓存，减少后续 isAdmin() 的 DB 调用
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.id === userId) {
+      adminStatusCache = {
+        userId,
+        isAdmin: isAdminResult,
+        timestamp: Date.now()
+      };
+    }
+
+    return isAdminResult;
   } catch (error) {
     console.error('获取管理员状态错误:', error);
-    // 超时或错误时返回 false，不影响应用运行
     return false;
   }
 }

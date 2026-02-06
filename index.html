@@ -24,6 +24,13 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #a8a29e; 
       }
+
+      /* 3D Card Tilt Effect - 平滑过渡 */
+      .card-tilt {
+        transition: transform 0.2s ease-out;
+        transform-style: preserve-3d;
+        perspective: 1000px;
+      }
     </style>
 </head>
   <body class="bg-[#fdfbf7] text-stone-800 font-sans antialiased">

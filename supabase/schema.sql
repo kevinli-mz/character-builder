@@ -115,17 +115,47 @@ CREATE TABLE IF NOT EXISTS characters (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Cards Table (card designs, managed by admins only)
+CREATE TABLE IF NOT EXISTS cards (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  storage_path TEXT NOT NULL,
+  public_url TEXT NOT NULL,
+  is_default BOOLEAN DEFAULT FALSE,
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Presets Table (user saved character presets with card and text)
+CREATE TABLE IF NOT EXISTS presets (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  character_state JSONB NOT NULL,
+  card_id UUID REFERENCES cards(id) ON DELETE SET NULL,
+  mask_shape TEXT CHECK (mask_shape IN ('square', 'circle', 'diamond', 'rounded_rect')) DEFAULT 'square',
+  card_text_title TEXT,
+  card_text_body TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_assets_category_id ON assets(category_id);
 CREATE INDEX IF NOT EXISTS idx_characters_user_id ON characters(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_is_admin ON user_profiles(is_admin) WHERE is_admin = TRUE;
+CREATE INDEX IF NOT EXISTS idx_cards_is_default ON cards(is_default) WHERE is_default = TRUE;
+CREATE INDEX IF NOT EXISTS idx_presets_user_id ON presets(user_id);
 
 -- Enable Row Level Security
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE characters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE presets ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for user_profiles
 CREATE POLICY "Users can view own profile"
@@ -245,6 +275,57 @@ CREATE POLICY "Users can delete own characters"
   ON characters FOR DELETE
   USING (auth.uid() = user_id);
 
+-- RLS Policies for cards
+-- Everyone can view cards (they are global/shared)
+CREATE POLICY "Everyone can view cards"
+  ON cards FOR SELECT
+  USING (TRUE);
+
+-- Only admins can insert/update/delete cards
+CREATE POLICY "Admins can insert cards"
+  ON cards FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM user_profiles 
+      WHERE user_id = auth.uid() AND is_admin = TRUE
+    )
+  );
+
+CREATE POLICY "Admins can update cards"
+  ON cards FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles 
+      WHERE user_id = auth.uid() AND is_admin = TRUE
+    )
+  );
+
+CREATE POLICY "Admins can delete cards"
+  ON cards FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles 
+      WHERE user_id = auth.uid() AND is_admin = TRUE
+    )
+  );
+
+-- RLS Policies for presets
+CREATE POLICY "Users can view own presets"
+  ON presets FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own presets"
+  ON presets FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own presets"
+  ON presets FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own presets"
+  ON presets FOR DELETE
+  USING (auth.uid() = user_id);
+
 -- Function to automatically update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -272,6 +353,16 @@ CREATE TRIGGER update_assets_updated_at
 
 CREATE TRIGGER update_characters_updated_at
   BEFORE UPDATE ON characters
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_cards_updated_at
+  BEFORE UPDATE ON cards
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_presets_updated_at
+  BEFORE UPDATE ON presets
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 

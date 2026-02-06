@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
 import { getUserAdminStatus, clearAdminCache } from '../services/admin';
+import { AUTH_LOADING_TIMEOUT_MS } from '../constants/appConfig';
 
 interface AuthContextType {
   user: User | null;
@@ -22,8 +23,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 检查管理员状态
-  const checkAdminStatus = async (userId: string | undefined) => {
+  const checkAdminStatus = useCallback(async (userId: string | undefined) => {
     if (!userId) {
       setIsAdmin(false);
       return;
@@ -35,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('检查管理员状态错误:', error);
       setIsAdmin(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -47,7 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Auth loading timeout, proceeding anyway');
         setLoading(false);
       }
-    }, 10000); // 10秒超时
+    }, AUTH_LOADING_TIMEOUT_MS);
 
     // 获取初始会话
     supabase.auth.getSession().then(async ({ data: { session }, error }) => {
@@ -117,7 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const signUp = async (email: string, password: string, displayName?: string) => {
+  const signUp = useCallback(async (email: string, password: string, displayName?: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -127,64 +127,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       },
     });
-
-    if (error) {
-      return { error };
-    }
-
+    if (error) return { error };
     if (data.user) {
       setUser(data.user);
       setSession(data.session);
       await checkAdminStatus(data.user.id);
     }
-
     return { error: null };
-  };
+  }, [checkAdminStatus]);
 
-  const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      return { error };
-    }
-
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error };
     if (data.user && data.session) {
       setUser(data.user);
       setSession(data.session);
       await checkAdminStatus(data.user.id);
     }
-
     return { error: null };
-  };
+  }, [checkAdminStatus]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-    clearAdminCache(); // 清除管理员状态缓存
+    clearAdminCache();
     setUser(null);
     setSession(null);
     setIsAdmin(false);
-  };
+  }, []);
 
-  const resetPassword = async (email: string) => {
+  const resetPassword = useCallback(async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     return { error };
-  };
+  }, []);
 
-  const value = {
-    user,
-    session,
-    isAdmin,
-    loading,
-    signUp,
-    signIn,
-    signOut,
-    resetPassword,
-  };
+  const value = useMemo(
+    () => ({
+      user,
+      session,
+      isAdmin,
+      loading,
+      signUp,
+      signIn,
+      signOut,
+      resetPassword,
+    }),
+    [user, session, isAdmin, loading, signUp, signIn, signOut, resetPassword]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

@@ -125,6 +125,76 @@ export interface Database {
           updated_at?: string
         }
       }
+      cards: {
+        Row: {
+          id: string
+          name: string
+          storage_path: string
+          public_url: string
+          is_default: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          storage_path: string
+          public_url: string
+          is_default?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          storage_path?: string
+          public_url?: string
+          is_default?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      presets: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          character_state: Json
+          card_id: string | null
+          mask_shape: 'square' | 'circle' | 'diamond' | 'rounded_rect'
+          card_text_title: string | null
+          card_text_body: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          character_state: Json
+          card_id?: string | null
+          mask_shape?: 'square' | 'circle' | 'diamond' | 'rounded_rect'
+          card_text_title?: string | null
+          card_text_body?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          character_state?: Json
+          card_id?: string | null
+          mask_shape?: 'square' | 'circle' | 'diamond' | 'rounded_rect'
+          card_text_title?: string | null
+          card_text_body?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }

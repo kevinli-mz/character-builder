@@ -1,11 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { AppData, Asset, Category } from '../types';
+import { sortCategoriesByZIndex } from '../utils/categories';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
-import { Upload, Trash2, ArrowUp, ArrowDown, FolderPlus, Image as ImageIcon, LogOut, CheckCircle, XCircle, GripVertical, Pencil, Star, MoreVertical, AlertTriangle, Users, Shield } from 'lucide-react';
-import { uploadAssets, deleteAsset } from '../services/api';
+import { Upload, Trash2, ArrowUp, ArrowDown, FolderPlus, Image as ImageIcon, LogOut, CheckCircle, XCircle, GripVertical, Pencil, Star, MoreVertical, AlertTriangle, Users, Shield, CreditCard } from 'lucide-react';
+import { uploadAssets, deleteAsset, fetchCards, uploadCard, deleteCard } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { getAllUsers, updateUserAdminStatus } from '../services/admin';
+import { Card } from '../types';
 
 interface AdminDashboardProps {
   data: AppData;
@@ -40,7 +42,7 @@ interface RenameModalState {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, onLogout }) => {
   const { signOut, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'upload' | 'assets' | 'categories' | 'users'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'assets' | 'categories' | 'users' | 'cards'>('upload');
   const [uploadCategory, setUploadCategory] = useState<string>(data.categories[0]?.id || '');
   const [isDragging, setIsDragging] = useState(false);
   const [draggedAssetId, setDraggedAssetId] = useState<string | null>(null);
@@ -51,6 +53,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [isDeletingStock, setIsDeletingStock] = useState(false);
   
+  // Card management state
+  const [cards, setCards] = useState<Card[]>([]);
+  const [loadingCards, setLoadingCards] = useState(false);
+  const [cardUploadName, setCardUploadName] = useState('');
+  const [cardUploadIsDefault, setCardUploadIsDefault] = useState(false);
+  const [isUploadingCard, setIsUploadingCard] = useState(false);
+  const [deleteCardModal, setDeleteCardModal] = useState<{ isOpen: boolean; cardId: string; cardName: string }>({
+    isOpen: false,
+    cardId: '',
+    cardName: ''
+  });
+  
   // Modal States
   const [deleteModal, setDeleteModal] = useState<DeleteModalState>({ isOpen: false, assetId: '', assetName: '' });
   const [renameModal, setRenameModal] = useState<RenameModalState>({ isOpen: false, assetId: '', currentName: '' });
@@ -58,6 +72,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const categoriesByLayerOrder = useMemo(
+    () => [...sortCategoriesByZIndex(data.categories)].reverse(),
+    [data.categories]
+  );
 
   // Close context menu on global click
   useEffect(() => {
@@ -80,6 +99,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
     }
   }, [activeTab]);
 
+  // Load cards when cards tab is active
+  useEffect(() => {
+    if (activeTab === 'cards') {
+      loadCards();
+    }
+  }, [activeTab]);
+
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
@@ -90,6 +116,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
       addToast('加载用户列表失败', 'error');
     } finally {
       setLoadingUsers(false);
+    }
+  };
+
+  const loadCards = async () => {
+    setLoadingCards(true);
+    try {
+      const loadedCards = await fetchCards();
+      setCards(loadedCards);
+    } catch (error) {
+      console.error('加载卡牌列表失败:', error);
+      addToast('加载卡牌列表失败', 'error');
+    } finally {
+      setLoadingCards(false);
+    }
+  };
+
+  const handleCardUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    
+    if (!cardUploadName.trim()) {
+      addToast('请输入卡牌名称', 'error');
+      return;
+    }
+    
+    setIsUploadingCard(true);
+    try {
+      const file = files[0];
+      const newCard = await uploadCard(file, cardUploadName.trim(), cardUploadIsDefault);
+      setCards([...cards, newCard]);
+      setCardUploadName('');
+      setCardUploadIsDefault(false);
+      addToast('卡牌上传成功！');
+    } catch (error) {
+      console.error('上传卡牌失败:', error);
+      addToast(error instanceof Error ? error.message : '上传卡牌失败', 'error');
+    } finally {
+      setIsUploadingCard(false);
+    }
+  };
+
+  const handleDeleteCard = async () => {
+    try {
+      await deleteCard(deleteCardModal.cardId);
+      setCards(cards.filter(c => c.id !== deleteCardModal.cardId));
+      setDeleteCardModal({ isOpen: false, cardId: '', cardName: '' });
+      addToast('卡牌已删除');
+    } catch (error) {
+      console.error('删除卡牌失败:', error);
+      addToast('删除卡牌失败，请重试', 'error');
     }
   };
 
@@ -361,7 +436,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
   };
 
   const moveCategory = async (index: number, direction: 'up' | 'down') => {
-    const sorted = [...data.categories].sort((a, b) => a.zIndex - b.zIndex);
+    const sorted = sortCategoriesByZIndex(data.categories);
     const targetIndex = direction === 'up' ? index + 1 : index - 1;
     
     if (targetIndex < 0 || targetIndex >= sorted.length) return;
@@ -585,6 +660,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
           >
             <Users className="w-4 h-4 mr-3" /> 用户管理
           </Button>
+          <Button 
+            variant={activeTab === 'cards' ? 'primary' : 'ghost'} 
+            className="justify-start w-full" 
+            onClick={() => setActiveTab('cards')}
+          >
+            <CreditCard className="w-4 h-4 mr-3" /> 卡牌管理
+          </Button>
           <div className="mt-auto pt-4 border-t border-stone-200">
             <Button 
               variant="ghost" 
@@ -768,7 +850,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
               </p>
 
               <div className="flex flex-col gap-3">
-                {[...data.categories].sort((a, b) => a.zIndex - b.zIndex).reverse().map((cat, idx, arr) => (
+                {categoriesByLayerOrder.map((cat, idx, arr) => (
                   <div key={cat.id} className="p-4 bg-white rounded-2xl border border-stone-100 shadow-sm flex items-center justify-between transition-all hover:shadow-md hover:border-emerald-200">
                     <div className="flex items-center gap-4">
                        <span className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-sm shadow-inner">
@@ -887,8 +969,150 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
             </div>
           )}
 
+          {/* CARDS TAB */}
+          {activeTab === 'cards' && (
+            <div className="max-w-4xl mx-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-stone-800">卡牌管理</h2>
+                <Button onClick={loadCards} disabled={loadingCards}>
+                  <CreditCard className="w-4 h-4 mr-2" /> 刷新
+                </Button>
+              </div>
+
+              {/* Upload Card Section */}
+              <div className="bg-white rounded-3xl shadow-sm border border-stone-100 p-6 mb-6">
+                <h3 className="text-lg font-bold text-stone-800 mb-4">上传新卡牌</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-stone-600 mb-2">卡牌名称</label>
+                    <input
+                      type="text"
+                      value={cardUploadName}
+                      onChange={(e) => setCardUploadName(e.target.value)}
+                      placeholder="输入卡牌名称..."
+                      className="w-full px-4 py-2 rounded-lg border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="card-default"
+                      checked={cardUploadIsDefault}
+                      onChange={(e) => setCardUploadIsDefault(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-400"
+                    />
+                    <label htmlFor="card-default" className="text-sm text-stone-600">
+                      设为默认卡牌
+                    </label>
+                  </div>
+                  <div
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleCardUpload(e.dataTransfer.files);
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    className="border-2 border-dashed border-stone-300 rounded-xl p-8 text-center hover:border-emerald-400 transition-colors"
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleCardUpload(e.target.files)}
+                      className="hidden"
+                      id="card-upload"
+                      disabled={isUploadingCard}
+                    />
+                    <label htmlFor="card-upload" className="cursor-pointer">
+                      <Upload className="w-8 h-8 text-stone-400 mx-auto mb-2" />
+                      <p className="text-stone-600 font-medium">
+                        {isUploadingCard ? '上传中...' : '点击或拖拽图片到这里上传'}
+                      </p>
+                      <p className="text-xs text-stone-400 mt-1">支持 PNG、JPG、SVG 等格式</p>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cards List */}
+              {loadingCards ? (
+                <div className="text-center py-20 text-stone-400">
+                  <div className="animate-spin h-8 w-8 border-4 border-emerald-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p>加载中...</p>
+                </div>
+              ) : cards.length === 0 ? (
+                <div className="bg-white rounded-3xl shadow-sm border border-stone-100 p-12 text-center">
+                  <CreditCard className="w-12 h-12 text-stone-300 mx-auto mb-4" />
+                  <p className="text-stone-500">暂无卡牌，上传你的第一张卡牌吧！</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {cards.map(card => (
+                    <div
+                      key={card.id}
+                      className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden hover:shadow-lg transition-shadow"
+                    >
+                      <div className="aspect-[3/4] bg-stone-50 relative">
+                        <img
+                          src={card.src}
+                          alt={card.name}
+                          className="w-full h-full object-cover"
+                        />
+                        {card.isDefault && (
+                          <div className="absolute top-2 right-2 bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                            默认
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4">
+                        <h4 className="font-bold text-stone-800 mb-2">{card.name}</h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteCardModal({
+                            isOpen: true,
+                            cardId: card.id,
+                            cardName: card.name
+                          })}
+                          className="w-full text-red-500 hover:text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" /> 删除
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
+
+      {/* Delete Card Modal */}
+      <Modal
+        isOpen={deleteCardModal.isOpen}
+        onClose={() => setDeleteCardModal({ isOpen: false, cardId: '', cardName: '' })}
+      >
+        <div className="p-6">
+          <h2 className="text-2xl font-bold text-stone-800 mb-4">删除卡牌</h2>
+          <p className="text-stone-600 mb-6">
+            确定要删除卡牌 <span className="font-bold">"{deleteCardModal.cardName}"</span> 吗？此操作无法撤销。
+          </p>
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => setDeleteCardModal({ isOpen: false, cardId: '', cardName: '' })}
+              className="flex-1"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleDeleteCard}
+              className="flex-1 bg-red-500 hover:bg-red-600"
+            >
+              删除
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
