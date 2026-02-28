@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/Button';
-import { LogIn, UserPlus, Mail, Lock, User } from 'lucide-react';
+import { LogIn, UserPlus, Mail, Lock, User, GraduationCap } from 'lucide-react';
+
+const FLOAT_CHARS = ['✨', '🌸', '♥', '★', '·'];
+const FLOAT_DURATION_MS = 1200;
 
 export const Auth: React.FC = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -11,8 +14,25 @@ export const Auth: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; char: string }>>([]);
+  const idRef = useRef(0);
+  const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const { signIn, signUp, resetPassword } = useAuth();
+
+  const addParticle = useCallback((clientX: number, clientY: number) => {
+    const id = ++idRef.current;
+    const char = FLOAT_CHARS[Math.floor(Math.random() * FLOAT_CHARS.length)];
+    setParticles((prev) => [...prev, { id, x: clientX, y: clientY, char }]);
+    const t = setTimeout(() => {
+      setParticles((prev) => prev.filter((p) => p.id !== id));
+    }, FLOAT_DURATION_MS);
+    timeoutRefs.current.push(t);
+  }, []);
+
+  const handleAreaClick = (e: React.MouseEvent) => {
+    addParticle(e.clientX, e.clientY);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,17 +85,50 @@ export const Auth: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#fdfbf7] p-4">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-stone-200 p-8">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-400 rounded-2xl mb-4 rotate-3">
-            <span className="text-white font-bold text-2xl">CP</span>
+    <div
+      className="min-h-screen flex items-center justify-center bg-[#fdfbf7] p-4 cursor-default"
+      onClick={handleAreaClick}
+    >
+      {/* Floating particles */}
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          className="pointer-events-none fixed text-emerald-400/90 animate-float-up"
+          style={{
+            left: p.x,
+            top: p.y,
+            transform: 'translate(-50%, -50%)',
+            fontSize: '1.25rem',
+            zIndex: 50,
+          }}
+        >
+          {p.char}
+        </div>
+      ))}
+
+      <div
+        className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-stone-200 p-8 relative cursor-default"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="text-center mb-8 cursor-pointer select-none"
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            addParticle(rect.left + rect.width / 2, rect.top + 40);
+          }}
+        >
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-400 rounded-2xl mb-4 rotate-3 transition-transform hover:scale-110 hover:rotate-6 active:scale-95">
+            <GraduationCap className="w-8 h-8 text-white" strokeWidth={2} />
           </div>
-          <h1 className="text-3xl font-bold text-stone-800 mb-2">
-            {isSignUp ? '创建账户' : '欢迎回来'}
+          <h1 className="text-2xl font-bold text-stone-800 mb-1">
+            本子的装扮屋
           </h1>
-          <p className="text-stone-500">
-            {isSignUp ? '开始创建你的角色' : '登录以访问你的角色'}
+          <h2 className="text-xl font-semibold text-stone-600 mb-2">
+            {isSignUp ? '创建账户' : '欢迎回来'}
+          </h2>
+          <p className="text-stone-500 text-sm">
+            {isSignUp ? '开始装扮你的角色' : '登录以访问你的装扮'}
           </p>
         </div>
 
@@ -195,4 +248,3 @@ export const Auth: React.FC = () => {
     </div>
   );
 };
-

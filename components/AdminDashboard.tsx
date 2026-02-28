@@ -3,7 +3,7 @@ import { AppData, Asset, Category } from '../types';
 import { sortCategoriesByZIndex } from '../utils/categories';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
-import { Upload, Trash2, ArrowUp, ArrowDown, FolderPlus, Image as ImageIcon, LogOut, CheckCircle, XCircle, GripVertical, Pencil, Star, MoreVertical, AlertTriangle, Users, Shield, CreditCard } from 'lucide-react';
+import { Upload, Trash2, ArrowUp, ArrowDown, FolderPlus, Image as ImageIcon, LogOut, CheckCircle, XCircle, GripVertical, Pencil, Star, MoreVertical, AlertTriangle, Users, Shield, CreditCard, GraduationCap } from 'lucide-react';
 import { uploadAssets, deleteAsset, fetchCards, uploadCard, deleteCard } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { getAllUsers, updateUserAdminStatus } from '../services/admin';
@@ -40,6 +40,12 @@ interface RenameModalState {
   currentName: string;
 }
 
+interface RenameCategoryModalState {
+  isOpen: boolean;
+  categoryId: string;
+  currentName: string;
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, onLogout }) => {
   const { signOut, user } = useAuth();
   const [activeTab, setActiveTab] = useState<'upload' | 'assets' | 'categories' | 'users' | 'cards'>('upload');
@@ -69,9 +75,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
   const [deleteModal, setDeleteModal] = useState<DeleteModalState>({ isOpen: false, assetId: '', assetName: '' });
   const [renameModal, setRenameModal] = useState<RenameModalState>({ isOpen: false, assetId: '', currentName: '' });
   const [renameInputValue, setRenameInputValue] = useState('');
+  const [renameCategoryModal, setRenameCategoryModal] = useState<RenameCategoryModalState>({ isOpen: false, categoryId: '', currentName: '' });
+  const [renameCategoryInputValue, setRenameCategoryInputValue] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameCategoryInputRef = useRef<HTMLInputElement>(null);
 
   const categoriesByLayerOrder = useMemo(
     () => [...sortCategoriesByZIndex(data.categories)].reverse(),
@@ -91,6 +100,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
       setTimeout(() => renameInputRef.current?.select(), 100);
     }
   }, [renameModal.isOpen]);
+
+  // Focus category rename input when modal opens
+  useEffect(() => {
+    if (renameCategoryModal.isOpen && renameCategoryInputRef.current) {
+      setTimeout(() => {
+        renameCategoryInputRef.current?.focus();
+        renameCategoryInputRef.current?.select();
+      }, 100);
+    }
+  }, [renameCategoryModal.isOpen]);
 
   // Load users when users tab is active
   useEffect(() => {
@@ -463,6 +482,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
     }
   };
 
+  const confirmRenameCategory = async () => {
+    const { categoryId, currentName } = renameCategoryModal;
+    const newName = renameCategoryInputValue.trim();
+    if (!newName || newName === currentName) {
+      setRenameCategoryModal(prev => ({ ...prev, isOpen: false }));
+      return;
+    }
+    try {
+      const { updateCategory } = await import('../services/api');
+      await updateCategory(categoryId, { name: newName });
+      onUpdate({
+        ...data,
+        categories: data.categories.map(c =>
+          c.id === categoryId ? { ...c, name: newName } : c
+        ),
+      });
+      setRenameCategoryModal(prev => ({ ...prev, isOpen: false }));
+      addToast('图层名称已更新');
+    } catch (error) {
+      console.error('重命名图层失败:', error);
+      addToast('重命名失败，请重试', 'error');
+    }
+  };
+
   // --- Drag and Drop for Assets ---
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -577,6 +620,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
         </form>
       </Modal>
 
+      {/* Rename Category (Layer) Modal */}
+      <Modal
+        isOpen={renameCategoryModal.isOpen}
+        onClose={() => setRenameCategoryModal(prev => ({ ...prev, isOpen: false }))}
+        title="重命名图层"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRenameCategoryModal(prev => ({ ...prev, isOpen: false }))}>
+              取消
+            </Button>
+            <Button variant="primary" onClick={confirmRenameCategory}>
+              保存
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-stone-500">仅修改显示名称，ID 不变，不影响已有资产与预设。</p>
+          <div>
+            <label className="block text-sm font-bold text-stone-500 mb-1.5">图层名称</label>
+            <input
+              ref={renameCategoryInputRef}
+              type="text"
+              value={renameCategoryInputValue}
+              onChange={e => setRenameCategoryInputValue(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && confirmRenameCategory()}
+              className="w-full px-4 py-3 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:ring-2 focus:ring-emerald-400 focus:border-transparent outline-none transition-all text-stone-800 font-medium"
+              placeholder="例如：发型、表情、衣服"
+            />
+          </div>
+        </div>
+      </Modal>
 
       {/* Context Menu */}
       {contextMenu && (
@@ -610,8 +685,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
       <header className="bg-white/80 backdrop-blur-md border-b border-stone-200 px-8 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-bold text-stone-800 flex items-center gap-2">
-            <span className="bg-emerald-400 text-white p-1.5 rounded-lg rotate-3 shadow-sm">CP</span>
-            管理面板
+            <span className="bg-emerald-400 text-white p-1.5 rounded-lg rotate-3 shadow-sm flex items-center justify-center"><GraduationCap className="w-4 h-4" /></span>
+            本子的装扮屋 · 管理面板
           </h1>
           {user && (
             <span className="text-sm text-stone-500">
@@ -867,6 +942,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, onUpdate, 
                        </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-stone-400 hover:text-emerald-600 hover:bg-emerald-50"
+                        onClick={() => {
+                          setRenameCategoryModal({ isOpen: true, categoryId: cat.id, currentName: cat.name });
+                          setRenameCategoryInputValue(cat.name);
+                        }}
+                        title="重命名图层"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       <Button 
                         size="sm" 
                         variant="secondary" 

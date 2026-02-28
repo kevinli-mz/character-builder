@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>角色构建器</title>
+    <title>本子的装扮屋</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       /* Custom scrollbar for webkit */
@@ -30,6 +30,13 @@
         transition: transform 0.2s ease-out;
         transform-style: preserve-3d;
         perspective: 1000px;
+      }
+      @keyframes float-up {
+        0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -120px) scale(1.2); }
+      }
+      .animate-float-up {
+        animation: float-up 1200ms ease-out forwards;
       }
     </style>
 </head>

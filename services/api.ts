@@ -32,7 +32,8 @@ export async function fetchData(): Promise<AppData> {
       id: cat.id,
       name: cat.name,
       zIndex: cat.z_index,
-      defaultAssetId: cat.default_asset_id || undefined
+      defaultAssetId: cat.default_asset_id || undefined,
+      icon: cat.icon || undefined
     }));
     const assets: Asset[] = (assetsData || []).map((asset: any) => ({
       id: asset.id,
@@ -74,6 +75,7 @@ export async function saveData(data: AppData): Promise<boolean> {
           name: category.name,
           z_index: category.zIndex,
           default_asset_id: category.defaultAssetId || null,
+          icon: category.icon ?? null,
           created_by: user.id
         } as any, {
           onConflict: 'id'
@@ -121,7 +123,7 @@ export async function saveData(data: AppData): Promise<boolean> {
 }
 
 // 更新单个分类（用于重命名、设置默认值等）
-export async function updateCategory(categoryId: string, updates: { name?: string; z_index?: number; default_asset_id?: string | null }): Promise<boolean> {
+export async function updateCategory(categoryId: string, updates: { name?: string; z_index?: number; default_asset_id?: string | null; icon?: string | null }): Promise<boolean> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

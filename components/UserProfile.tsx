@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Preset, CharacterState, MaskShape } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
-import { ArrowLeft, Trash2, LogOut } from 'lucide-react';
+import { ArrowLeft, Trash2, LogOut, GraduationCap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserPresets, deletePreset, loadPreset } from '../services/api';
 import { fetchCards } from '../services/api';
@@ -116,7 +116,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onClose, onLoadPreset 
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-400 rounded-2xl mb-4 rotate-3 animate-pulse">
-                <span className="text-white font-bold text-2xl">CP</span>
+                <GraduationCap className="w-8 h-8 text-white" />
               </div>
               <p className="text-stone-400">加载中...</p>
             </div>

@@ -7,6 +7,7 @@ import { UserProfile } from './components/UserProfile';
 import { Auth } from './components/Auth';
 import { useAuth } from './contexts/AuthContext';
 import { DATA_LOAD_TIMEOUT_MS, AUTH_LOADING_TIMEOUT_MS } from './constants/appConfig';
+import { GraduationCap } from 'lucide-react';
 
 const App: React.FC = () => {
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -125,7 +126,7 @@ const App: React.FC = () => {
       <div className="h-screen w-screen flex items-center justify-center bg-[#fdfbf7] text-stone-400">
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-400 rounded-2xl mb-4 rotate-3 animate-pulse">
-            <span className="text-white font-bold text-2xl">CP</span>
+            <GraduationCap className="w-8 h-8 text-white" />
           </div>
           <p>加载中...</p>
         </div>

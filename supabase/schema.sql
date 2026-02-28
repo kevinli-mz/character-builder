@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS categories (
   name TEXT NOT NULL,
   z_index INTEGER NOT NULL DEFAULT 0,
   default_asset_id TEXT,
+  icon TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

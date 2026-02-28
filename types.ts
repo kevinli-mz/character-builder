@@ -3,6 +3,8 @@ export interface Category {
   name: string;
   zIndex: number;
   defaultAssetId?: string; // Optional ID of the default asset for this category
+  /** Icon key for layer tab, e.g. "lucide:Shirt" or "hi2:UserCircleIcon" */
+  icon?: string;
 }
 
 export interface Asset {

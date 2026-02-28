@@ -3,7 +3,7 @@ import { AppData, Asset, Category, CharacterState, Card, MaskShape, Preset } fro
 import { Canvas } from './Canvas';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
-import { Download, Shuffle, RotateCcw, Lock, Save, Square, Circle, Edit2, User } from 'lucide-react';
+import { Download, Shuffle, RotateCcw, Lock, Save, Square, Circle, Edit2, User, GraduationCap } from 'lucide-react';
 import { fetchCards, savePreset } from '../services/api';
 import { sortCategoriesByZIndex } from '../utils/categories';
 import { CARD_TITLE_FONT_FAMILY, CARD_BODY_FONT_FAMILY } from '../constants/cardTheme';
@@ -56,16 +56,11 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick, 
   const tiltCurrent = useRef({ x: 0, y: 0 });
   const rafRef = useRef<number>(0);
 
-  // Load cards on mount
+  // Load cards on mount — no default card; user selects if they want one
   useEffect(() => {
     const loadCards = async () => {
       const loadedCards = await fetchCards();
       setCards(loadedCards);
-      // Set default card if exists
-      const defaultCard = loadedCards.find(c => c.isDefault);
-      if (defaultCard) {
-        setSelectedCardId(defaultCard.id);
-      }
     };
     loadCards();
   }, []);
@@ -378,8 +373,8 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick, 
       {/* Mobile Header */}
       <div className="md:hidden p-4 bg-white/80 backdrop-blur border-b border-stone-200 flex justify-between items-center z-20 sticky top-0">
         <h1 className="font-bold text-lg text-stone-800 flex items-center gap-2">
-           <span className="bg-emerald-400 text-white px-2 py-0.5 rounded-lg rotate-3 text-sm">CP</span>
-           构建器
+           <span className="bg-emerald-400 text-white px-2 py-0.5 rounded-lg rotate-3 text-sm flex items-center justify-center"><GraduationCap className="w-4 h-4" /></span>
+           本子的装扮屋
         </h1>
         <div className="flex gap-2">
           {onProfileClick && (
@@ -411,16 +406,16 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick, 
       {/* LEFT: 角色编辑器 */}
       <div className="flex flex-col md:w-1/3 lg:w-[28rem] md:shrink-0 bg-white border-r border-stone-200 z-10 shadow-2xl md:shadow-stone-200/50 order-2 md:order-1 h-1/2 md:h-full">
         
-        {/* Category Tabs */}
+        {/* Category Tabs — Chinese labels */}
         <div className="flex overflow-x-auto p-4 border-b border-stone-100 gap-2 scrollbar-hide bg-white">
           {sortedCategories.map(cat => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
               className={`whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all transform active:scale-95 ${
-                activeCategory === cat.id 
-                ? 'bg-emerald-400 text-white shadow-lg shadow-emerald-200' 
-                : 'bg-stone-50 text-stone-500 border border-stone-100 hover:bg-stone-100'
+                activeCategory === cat.id
+                  ? 'bg-emerald-400 text-white shadow-lg shadow-emerald-200'
+                  : 'bg-stone-50 text-stone-500 border border-stone-100 hover:bg-stone-100'
               }`}
             >
               {cat.name}
