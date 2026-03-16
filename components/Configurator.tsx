@@ -7,6 +7,7 @@ import { Download, Shuffle, RotateCcw, Lock, Save, Square, Circle, Edit2, User, 
 import { fetchCards, savePreset } from '../services/api';
 import { sortCategoriesByZIndex } from '../utils/categories';
 import { CARD_TITLE_FONT_FAMILY, CARD_BODY_FONT_FAMILY } from '../constants/cardTheme';
+import { getTextColorFromImageData, CARD_TEXT_COLORS } from '../utils/cardTextColor';
 
 interface ConfiguratorProps {
   data: AppData;
@@ -273,9 +274,13 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick, 
 
       ctx.drawImage(charCanvas, charX, charY, charSize, charSize);
 
-      // Draw text if card is equipped — sizes scaled to match preview (text-3xl/4xl ≈ 72px, text-sm ≈ 28px at 1000px width)
+      // Draw text if card is equipped — pick light or dark text from card background (bottom half)
       if (hasCard) {
-        ctx.fillStyle = '#1c1917';
+        const halfY = Math.floor(canvas.height * 0.5);
+        const imageData = ctx.getImageData(0, halfY, canvas.width, canvas.height - halfY);
+        const textMode = getTextColorFromImageData(imageData);
+        const colors = CARD_TEXT_COLORS[textMode];
+
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const titleFont = CARD_TITLE_FONT_FAMILY && CARD_TITLE_FONT_FAMILY !== 'inherit'
@@ -291,11 +296,22 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick, 
 
         if (cardTextTitle) {
           ctx.font = titleFont;
+          ctx.fillStyle = colors.title;
+          if (textMode === 'light') {
+            ctx.shadowColor = 'rgba(0,0,0,0.35)';
+            ctx.shadowBlur = 2;
+          }
           ctx.fillText(cardTextTitle, canvas.width / 2, textY - titleOffset);
+          if (textMode === 'light') ctx.shadowBlur = 0;
         }
 
         if (cardTextBody) {
           ctx.font = bodyFont;
+          ctx.fillStyle = colors.body;
+          if (textMode === 'light') {
+            ctx.shadowColor = 'rgba(0,0,0,0.25)';
+            ctx.shadowBlur = 1;
+          }
           const maxWidth = canvas.width * 0.8;
           const lines = cardTextBody.split(/\r?\n/);
           let y = textY + 36;
@@ -318,6 +334,7 @@ export const Configurator: React.FC<ConfiguratorProps> = ({ data, onAdminClick, 
               y += bodyLineHeight;
             }
           }
+          if (textMode === 'light') ctx.shadowBlur = 0;
         }
       }
 

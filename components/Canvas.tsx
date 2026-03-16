@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Asset, Category, CharacterState, MaskShape } from '../types';
 import { CARD_TITLE_FONT_FAMILY, CARD_BODY_FONT_FAMILY } from '../constants/cardTheme';
 import { sortCategoriesByZIndex } from '../utils/categories';
+import { getTextColorFromImageUrl, CARD_TEXT_COLORS } from '../utils/cardTextColor';
 
 interface CanvasProps {
   categories: Category[];
@@ -35,8 +36,21 @@ export const Canvas: React.FC<CanvasProps> = ({
   enableTilt = false
 }) => {
   const sortedCategories = useMemo(() => sortCategoriesByZIndex(categories), [categories]);
+  const [textColorMode, setTextColorMode] = useState<'light' | 'dark'>('dark');
 
   const hasCard = !!cardSrc;
+
+  useEffect(() => {
+    if (!cardSrc) {
+      setTextColorMode('dark');
+      return;
+    }
+    let cancelled = false;
+    getTextColorFromImageUrl(cardSrc).then((mode) => {
+      if (!cancelled) setTextColorMode(mode);
+    });
+    return () => { cancelled = true; };
+  }, [cardSrc]);
   const aspectRatio = hasCard ? '3/4' : '1/1';
 
   // 角色区域：有卡牌时为正方形，略下移与顶部留距，圆形/菱形遮罩略缩小以贴合角色
@@ -136,16 +150,24 @@ export const Canvas: React.FC<CanvasProps> = ({
         >
           {cardTextTitle && (
             <h2
-              className="text-3xl md:text-4xl font-bold text-stone-800 mb-3 text-center w-full"
-              style={{ fontFamily: CARD_TITLE_FONT_FAMILY }}
+              className="text-3xl md:text-4xl font-bold mb-3 text-center w-full"
+              style={{
+                fontFamily: CARD_TITLE_FONT_FAMILY,
+                color: CARD_TEXT_COLORS[textColorMode].title,
+                textShadow: textColorMode === 'light' ? '0 1px 2px rgba(0,0,0,0.3)' : 'none',
+              }}
             >
               {cardTextTitle}
             </h2>
           )}
           {cardTextBody && (
             <p
-              className="text-sm text-stone-600 text-center max-w-xs whitespace-pre-line"
-              style={{ fontFamily: CARD_BODY_FONT_FAMILY }}
+              className="text-sm text-center max-w-xs whitespace-pre-line"
+              style={{
+                fontFamily: CARD_BODY_FONT_FAMILY,
+                color: CARD_TEXT_COLORS[textColorMode].body,
+                textShadow: textColorMode === 'light' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
+              }}
             >
               {cardTextBody}
             </p>
