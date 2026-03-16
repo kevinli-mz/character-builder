@@ -18,7 +18,8 @@ export const Auth: React.FC = () => {
   const idRef = useRef(0);
   const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const { signIn, signUp, resetPassword } = useAuth();
+  const { signIn, signUp, signInWithWechat, resetPassword } = useAuth();
+  const [wechatLoading, setWechatLoading] = useState(false);
 
   const addParticle = useCallback((clientX: number, clientY: number) => {
     const id = ++idRef.current;
@@ -217,6 +218,32 @@ export const Auth: React.FC = () => {
             )}
           </Button>
         </form>
+
+        {/* Divider */}
+        <div className="flex items-center gap-4 mt-6">
+          <div className="flex-1 h-px bg-stone-200"></div>
+          <span className="text-xs text-stone-400">或</span>
+          <div className="flex-1 h-px bg-stone-200"></div>
+        </div>
+
+        {/* WeChat login */}
+        <button
+          type="button"
+          onClick={async () => {
+            setError(null);
+            setWechatLoading(true);
+            const { error } = await signInWithWechat();
+            if (error) setError(error.message);
+            setWechatLoading(false);
+          }}
+          disabled={wechatLoading}
+          className="w-full mt-4 flex items-center justify-center gap-2 py-3 rounded-xl border border-stone-200 bg-[#07C160] hover:bg-[#06ae56] text-white font-medium transition-colors disabled:opacity-50"
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current">
+            <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.3.3 0 0 0 .166-.054l1.9-1.106a.6.6 0 0 1 .3-.082.6.6 0 0 1 .166.025 10.6 10.6 0 0 0 3.092.456c.166 0 .328-.01.49-.018a6.7 6.7 0 0 1-.266-1.843c0-3.956 3.477-7.17 7.77-7.17.188 0 .373.01.557.022C16.578 4.394 12.937 2.188 8.691 2.188m-2.79 4.408a1.09 1.09 0 0 1 1.09 1.09 1.09 1.09 0 0 1-2.18 0 1.09 1.09 0 0 1 1.09-1.09m5.1 0c.603 0 1.09.489 1.09 1.09a1.09 1.09 0 0 1-2.18 0c0-.602.489-1.09 1.09-1.09M24 14.622c0-3.34-3.237-6.05-7.225-6.05-3.986 0-7.224 2.71-7.224 6.05s3.238 6.05 7.224 6.05c.853 0 1.674-.12 2.44-.34a.5.5 0 0 1 .13-.02.5.5 0 0 1 .243.066l1.495.87a.25.25 0 0 0 .13.042c.13 0 .23-.104.23-.233 0-.057-.023-.113-.038-.167l-.306-1.164a.47.47 0 0 1 .168-.523C23.025 18.18 24 16.49 24 14.622m-9.4-1.27a.86.86 0 0 1 0-1.72.86.86 0 0 1 0 1.72m4.35 0a.86.86 0 0 1 0-1.72.86.86 0 0 1 0 1.72"/>
+          </svg>
+          {wechatLoading ? '跳转中...' : '微信登录'}
+        </button>
 
         {!isSignUp && (
           <button

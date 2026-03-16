@@ -11,6 +11,7 @@ interface AuthContextType {
   loading: boolean;
   signUp: (email: string, password: string, displayName?: string) => Promise<{ error: AuthError | null }>;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signInWithWechat: () => Promise<{ error: AuthError | Error | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
 }
@@ -147,6 +148,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error: null };
   }, [checkAdminStatus]);
 
+  const signInWithWechat = useCallback(async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'wechat' as any,
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (error) return { error };
+      return { error: null };
+    } catch (err) {
+      return { error: err instanceof Error ? err : new Error('微信登录失败') };
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     clearAdminCache();
@@ -170,10 +186,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading,
       signUp,
       signIn,
+      signInWithWechat,
       signOut,
       resetPassword,
     }),
-    [user, session, isAdmin, loading, signUp, signIn, signOut, resetPassword]
+    [user, session, isAdmin, loading, signUp, signIn, signInWithWechat, signOut, resetPassword]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
